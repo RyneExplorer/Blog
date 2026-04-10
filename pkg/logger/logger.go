@@ -10,14 +10,40 @@ import (
 	"gopkg.in/natefinch/lumberjack.v2"
 )
 
+const (
+	colorRed    = "\033[31m"
+	colorGreen  = "\033[32m"
+	colorYellow = "\033[33m"
+	colorBlue   = "\033[34m"
+	colorReset  = "\033[0m"
+)
+
 var (
 	log   *zap.Logger
 	sugar *zap.SugaredLogger
 )
 
+// CustomLevelEncoder 自定义日志级别编码器，实现控制台颜色显示
+func CustomLevelEncoder(l zapcore.Level, enc zapcore.PrimitiveArrayEncoder) {
+	var color string
+	switch l {
+	case zapcore.DebugLevel:
+		color = colorBlue
+	case zapcore.InfoLevel:
+		color = colorGreen
+	case zapcore.WarnLevel:
+		color = colorYellow
+	case zapcore.ErrorLevel:
+		color = colorRed
+	default:
+		color = colorReset
+	}
+	enc.AppendString(color + l.CapitalString() + colorReset)
+}
+
 // Init 初始化日志系统
 func Init(cfg *config.LogConfig) error {
-	// 日志编码器配置
+	// 基础编码器配置
 	encoderConfig := zapcore.EncoderConfig{
 		TimeKey:        "time",
 		LevelKey:       "level",
@@ -46,7 +72,7 @@ func Init(cfg *config.LogConfig) error {
 		level = zapcore.ErrorLevel
 	}
 
-	// 文件输出
+	// 文件输出配置
 	fileWriter := &lumberjack.Logger{
 		Filename:   cfg.Filename,
 		MaxSize:    cfg.MaxSize,
@@ -55,17 +81,24 @@ func Init(cfg *config.LogConfig) error {
 		Compress:   cfg.Compress,
 	}
 
-	// 创建多个输出（文件 + 控制台）
-	var writers []zapcore.WriteSyncer
-	writers = append(writers, zapcore.AddSync(fileWriter))
-	writers = append(writers, zapcore.AddSync(os.Stdout))
-
-	// 核心
-	core := zapcore.NewCore(
+	// 创建文件核心 (JSON 格式，无颜色)
+	fileCore := zapcore.NewCore(
 		zapcore.NewJSONEncoder(encoderConfig),
-		zapcore.NewMultiWriteSyncer(writers...),
+		zapcore.AddSync(fileWriter),
 		level,
 	)
+
+	// 创建控制台核心 (Console 格式，带颜色)
+	consoleEncoderConfig := encoderConfig
+	consoleEncoderConfig.EncodeLevel = CustomLevelEncoder
+	consoleCore := zapcore.NewCore(
+		zapcore.NewConsoleEncoder(consoleEncoderConfig),
+		zapcore.AddSync(os.Stdout),
+		level,
+	)
+
+	// 合并核心
+	core := zapcore.NewTee(fileCore, consoleCore)
 
 	// 创建 logger
 	log = zap.New(core, zap.AddCaller(), zap.AddCallerSkip(1), zap.AddStacktrace(zapcore.ErrorLevel))

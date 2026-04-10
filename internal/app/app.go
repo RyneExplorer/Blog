@@ -17,6 +17,7 @@ import (
 	"blog/pkg/database"
 	"blog/pkg/logger"
 
+	"errors"
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
@@ -166,7 +167,7 @@ func (a *App) Run() {
 			zap.String("addr", a.server.Addr),
 			zap.String("mode", a.cfg.App.Mode),
 		)
-		if err := a.server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		if err := a.server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			logger.Fatal("HTTP 服务器启动失败", zap.Error(err))
 		}
 	}()
