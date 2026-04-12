@@ -1,8 +1,11 @@
 package api
 
 import (
-	"blog/internal/api/v1/auth"
-	"blog/internal/api/v1/user"
+	"blog/internal/api/article"
+	"blog/internal/api/auth"
+	"blog/internal/api/category"
+	"blog/internal/api/comment"
+	"blog/internal/api/user"
 	"blog/internal/middleware"
 	"blog/internal/service"
 
@@ -11,18 +14,27 @@ import (
 
 // Router 路由
 type Router struct {
-	userCtrl *user.Controller
-	authCtrl *auth.Controller
+	userCtrl     *user.UserController
+	authCtrl     *auth.AuthController
+	articleCtrl  *article.ArticleController
+	commentCtrl  *comment.CommentController
+	categoryCtrl *category.CategoryController
 }
 
 // NewRouter 创建路由
 func NewRouter(
 	userService service.UserService,
 	authService service.AuthService,
+	articleService service.ArticleService,
+	commentService service.CommentService,
+	categoryService service.CategoryService,
 ) *Router {
 	return &Router{
-		userCtrl: user.NewController(userService),
-		authCtrl: auth.NewController(authService, userService),
+		userCtrl:     user.NewUserController(userService),
+		authCtrl:     auth.NewAuthController(authService, userService),
+		articleCtrl:  article.NewArticleController(articleService),
+		commentCtrl:  comment.NewCommentController(commentService),
+		categoryCtrl: category.NewCategoryController(categoryService),
 	}
 }
 
@@ -34,20 +46,25 @@ func (r *Router) Setup(engine *gin.Engine) {
 	engine.Use(middleware.CORS())
 
 	// 健康检查
-	engine.GET("/api/v1/health", func(c *gin.Context) {
+	engine.GET("/api/health", func(c *gin.Context) {
 		c.JSON(200, gin.H{
 			"status":  "ok",
 			"message": "blog API is running",
 		})
 	})
 
-	// API v1 路由组
-	v1 := engine.Group("/api/v1")
+	// API 路由组
+	v1 := engine.Group("/api")
 	{
 		// 认证路由
 		r.authCtrl.RegisterRoutes(v1)
-
 		// 用户路由
 		r.userCtrl.RegisterRoutes(v1)
+		// 文章路由
+		r.articleCtrl.RegisterRoutes(v1, r.commentCtrl)
+		// 评论路由
+		r.commentCtrl.RegisterRoutes(v1)
+		// 分类路由
+		r.categoryCtrl.RegisterRoutes(v1)
 	}
 }

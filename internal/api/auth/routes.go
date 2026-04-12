@@ -1,11 +1,9 @@
 package auth
 
-import (
-	"github.com/gin-gonic/gin"
-)
+import "github.com/gin-gonic/gin"
 
 // RegisterRoutes 注册认证路由
-func (ctrl *Controller) RegisterRoutes(r *gin.RouterGroup) {
+func (ctrl *AuthController) RegisterRoutes(r *gin.RouterGroup) {
 	authGroup := r.Group("/auth")
 	{
 		authGroup.POST("/register", ctrl.Register)

@@ -8,10 +8,10 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// Response 统一响应结构
+// Response 统一响应结构（msg 与前端约定字段名一致）
 type Response struct {
 	Code    int         `json:"code"`
-	Message string      `json:"message"`
+	Message string      `json:"msg"`
 	Data    interface{} `json:"data,omitempty"`
 }
 

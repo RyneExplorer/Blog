@@ -2,11 +2,12 @@ package user
 
 import (
 	"blog/internal/middleware"
+
 	"github.com/gin-gonic/gin"
 )
 
 // RegisterRoutes 注册用户路由
-func (ctrl *Controller) RegisterRoutes(r *gin.RouterGroup) {
+func (ctrl *UserController) RegisterRoutes(r *gin.RouterGroup) {
 	userGroup := r.Group("/user")
 	userGroup.Use(middleware.Auth())
 	{

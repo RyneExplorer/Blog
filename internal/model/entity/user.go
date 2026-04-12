@@ -8,6 +8,8 @@ type User struct {
 	Email    string `gorm:"type:varchar(100);uniqueIndex;comment:邮箱" json:"email"`
 	Nickname string `gorm:"type:varchar(50);comment:昵称" json:"nickname"`
 	Avatar   string `gorm:"type:varchar(255);comment:头像" json:"avatar"`
+	Bio      string `gorm:"type:varchar(500);default:'';comment:个人简介" json:"bio"`
+	Role     int    `gorm:"type:tinyint;not null;default:1;comment:0管理员,1普通用户" json:"role"`
 	Status   int    `gorm:"type:tinyint;default:1;comment:状态:1正常,2禁用" json:"status"`
 }
 
