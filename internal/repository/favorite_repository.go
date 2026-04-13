@@ -25,7 +25,7 @@ func NewFavoriteRepository(db *gorm.DB) FavoriteRepository {
 func (r *favoriteRepository) FavoriteArticleInTx(ctx context.Context, userID, articleID uint) error {
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var exists int64
-		if err := tx.Model(&entity.Article{}).Where("id = ? AND status = ?", articleID, 1).Count(&exists).Error; err != nil {
+		if err := tx.Model(&entity.Article{}).Where("id = ? AND status = ?", articleID, 2).Count(&exists).Error; err != nil {
 			return err
 		}
 		if exists == 0 {

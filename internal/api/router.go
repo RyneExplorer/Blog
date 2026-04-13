@@ -5,6 +5,7 @@ import (
 	"blog/internal/api/auth"
 	"blog/internal/api/category"
 	"blog/internal/api/comment"
+	"blog/internal/api/super"
 	"blog/internal/api/user"
 	"blog/internal/middleware"
 	"blog/internal/service"
@@ -19,6 +20,7 @@ type Router struct {
 	articleCtrl  *article.ArticleController
 	commentCtrl  *comment.CommentController
 	categoryCtrl *category.CategoryController
+	superCtrl    *super.ReviewController
 }
 
 // NewRouter 创建路由
@@ -28,13 +30,15 @@ func NewRouter(
 	articleService service.ArticleService,
 	commentService service.CommentService,
 	categoryService service.CategoryService,
+	reviewService service.ReviewService,
 ) *Router {
 	return &Router{
-		userCtrl:     user.NewUserController(userService),
+		userCtrl:     user.NewUserController(userService, articleService),
 		authCtrl:     auth.NewAuthController(authService, userService),
-		articleCtrl:  article.NewArticleController(articleService),
+		articleCtrl:  article.NewArticleController(articleService, commentService),
 		commentCtrl:  comment.NewCommentController(commentService),
 		categoryCtrl: category.NewCategoryController(categoryService),
+		superCtrl:    super.NewReviewController(reviewService),
 	}
 }
 
@@ -61,10 +65,12 @@ func (r *Router) Setup(engine *gin.Engine) {
 		// 用户路由
 		r.userCtrl.RegisterRoutes(v1)
 		// 文章路由
-		r.articleCtrl.RegisterRoutes(v1, r.commentCtrl)
+		r.articleCtrl.RegisterRoutes(v1)
 		// 评论路由
 		r.commentCtrl.RegisterRoutes(v1)
 		// 分类路由
 		r.categoryCtrl.RegisterRoutes(v1)
+		// 管理员审核路由
+		r.superCtrl.RegisterRoutes(v1)
 	}
 }

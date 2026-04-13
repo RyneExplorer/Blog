@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"time"
+
+	"blog/internal/model/entity"
 )
 
 // ArticleRepository 文章仓储接口
@@ -13,6 +15,15 @@ type ArticleRepository interface {
 	GetPublishedDetailJoin(ctx context.Context, id uint) (*ArticleDetailJoinRow, error)
 	IncrementViewInTx(ctx context.Context, id uint) error
 	ExistsPublished(ctx context.Context, id uint) (bool, error)
+
+	// 用户文章模块
+	ListByUserWithJoin(ctx context.Context, userID uint, offset, limit int, categoryID *uint, sort string) ([]MyArticleListJoinRow, error)
+	CountByUser(ctx context.Context, userID uint, categoryID *uint) (int64, error)
+	GetByIDWithCategories(ctx context.Context, id uint) (*entity.Article, error)
+	CreateWithCategoriesInTx(ctx context.Context, article *entity.Article, categoryIDs []uint) error
+	UpdateByAuthorWithCategoriesInTx(ctx context.Context, id uint, userID uint, updates map[string]interface{}, categoryIDs []uint) (bool, error)
+	UpdateStatusByAuthor(ctx context.Context, id uint, userID uint, status int) (bool, error)
+	DeleteByAuthorInTx(ctx context.Context, id uint, userID uint) (bool, error)
 }
 
 // ArticleListJoinRow 列表 JOIN 扫描行
@@ -55,4 +66,23 @@ type ArticleDetailJoinRow struct {
 	Nickname      string    `gorm:"column:nickname"`
 	Bio           string    `gorm:"column:bio"`
 	Avatar        string    `gorm:"column:avatar"`
+}
+
+// MyArticleListJoinRow “我的文章列表”JOIN 扫描行（返回文章 + 一个分类）
+type MyArticleListJoinRow struct {
+	ID            uint           `gorm:"column:id"`
+	Title         string         `gorm:"column:title"`
+	Content       string         `gorm:"column:content"`
+	Summary       sql.NullString `gorm:"column:summary"`
+	CoverImage    string         `gorm:"column:cover_image"`
+	Status        int            `gorm:"column:status"`
+	ViewCount     int            `gorm:"column:view_count"`
+	LikeCount     int64          `gorm:"column:like_count"`
+	FavoriteCount int64          `gorm:"column:favorite_count"`
+	CommentCount  int64          `gorm:"column:comment_count"`
+	CreatedAt     time.Time      `gorm:"column:created_at"`
+	UpdatedAt     time.Time      `gorm:"column:updated_at"`
+	CategoryRefID sql.NullInt64  `gorm:"column:category_ref_id"`
+	CategoryName  string         `gorm:"column:category_name"`
+	CategorySlug  string         `gorm:"column:category_slug"`
 }

@@ -1,5 +1,28 @@
 package response
 
+// ArticleDetailResponse 文章详情（用于“我的文章详情”与公开详情）
+type ArticleDetailResponse struct {
+	ID            uint   `json:"id"`
+	Title         string `json:"title"`
+	Summary       string `json:"summary"`
+	Content       string `json:"content"`
+	CoverImage    string `json:"cover_image"`
+	Status        int    `json:"status"`
+	ViewCount     int    `json:"view_count"`
+	LikeCount     int    `json:"like_count"`
+	FavoriteCount int    `json:"favorite_count"`
+	CommentCount  int    `json:"comment_count"`
+	CategoryIDs   []uint `json:"category_ids"`
+	CreatedAt     string `json:"created_at"`
+	UpdatedAt     string `json:"updated_at"`
+}
+
+// MyArticleListItem “我的文章列表”单项
+type MyArticleListItem struct {
+	Article  ArticleBrief  `json:"article"`
+	Category CategoryBrief `json:"category"`
+}
+
 // ArticleBrief 文章列表中的 article 块
 type ArticleBrief struct {
 	ID            uint   `json:"id"`

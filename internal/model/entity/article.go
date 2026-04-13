@@ -9,7 +9,8 @@ type Article struct {
 	Content       string     `gorm:"type:longtext;not null;comment:正文" json:"content"`
 	Summary       string     `gorm:"type:varchar(255);comment:摘要" json:"summary"`
 	CoverImage    string     `gorm:"type:varchar(500);default:'';comment:封面图" json:"cover_image"`
-	Status        int        `gorm:"type:tinyint;default:1;index;comment:状态:1已发布,0草稿" json:"status"`
+	RejectReason  string     `gorm:"type:varchar(255);default:'';comment:驳回原因" json:"reject_reason"`
+	Status        int        `gorm:"type:tinyint;default:0;index;comment:状态:0草稿,1待审核,2已发布,3已拒绝,4已封禁" json:"status"`
 	ViewCount     int        `gorm:"type:int unsigned;default:0;comment:浏览量" json:"view_count"`
 	LikeCount     int64      `gorm:"default:0;comment:点赞数" json:"like_count"`
 	FavoriteCount int64      `gorm:"default:0;comment:收藏数" json:"favorite_count"`

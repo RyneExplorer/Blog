@@ -110,6 +110,7 @@ func (a *App) initDatabase() error {
 		&entity.Category{},
 		&entity.Article{},
 		&entity.ArticleCategory{},
+		&entity.ReviewLog{},
 		&entity.Comment{},
 		&entity.Like{},
 		&entity.Favorite{},
@@ -118,14 +119,6 @@ func (a *App) initDatabase() error {
 		logger.Warn("数据库迁移警告", zap.Error(err))
 	} else {
 		logger.Info("数据库迁移完成")
-	}
-
-	// 指定多对多中间表模型，使 article_categories 使用 ArticleCategory（含 created_at 等字段）
-	if err := a.mysqlDB.SetupJoinTable(&entity.Article{}, "Categories", &entity.ArticleCategory{}); err != nil {
-		logger.Warn("SetupJoinTable Article-Categories 失败", zap.Error(err))
-	}
-	if err := a.mysqlDB.SetupJoinTable(&entity.Category{}, "Articles", &entity.ArticleCategory{}); err != nil {
-		logger.Warn("SetupJoinTable Category-Articles 失败", zap.Error(err))
 	}
 
 	// 初始化 Redis（可选）
@@ -147,6 +140,7 @@ func (a *App) initDependencies() {
 	categoryRepo := repository.NewCategoryRepository(a.mysqlDB)
 	likeRepo := repository.NewLikeRepository(a.mysqlDB)
 	favoriteRepo := repository.NewFavoriteRepository(a.mysqlDB)
+	reviewRepo := repository.NewReviewRepository(a.mysqlDB)
 
 	// 创建 Service
 	userSvc := service.NewUserService(userRepo)
@@ -154,9 +148,10 @@ func (a *App) initDependencies() {
 	articleSvc := service.NewArticleService(articleRepo, likeRepo, favoriteRepo)
 	commentSvc := service.NewCommentService(commentRepo, articleRepo, likeRepo)
 	categorySvc := service.NewCategoryService(categoryRepo)
+	reviewSvc := service.NewReviewService(reviewRepo, userRepo, articleRepo)
 
 	// 创建 Router
-	a.router = api.NewRouter(userSvc, authSvc, articleSvc, commentSvc, categorySvc)
+	a.router = api.NewRouter(userSvc, authSvc, articleSvc, commentSvc, categorySvc, reviewSvc)
 }
 
 // initRouter 初始化路由

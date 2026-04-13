@@ -11,13 +11,15 @@ import (
 
 // UserController 用户控制器
 type UserController struct {
-	userService service.UserService
+	userService    service.UserService
+	articleService service.ArticleService
 }
 
 // NewUserController 创建用户控制器
-func NewUserController(userService service.UserService) *UserController {
+func NewUserController(userService service.UserService, articleService service.ArticleService) *UserController {
 	return &UserController{
-		userService: userService,
+		userService:    userService,
+		articleService: articleService,
 	}
 }
 
@@ -98,4 +100,24 @@ func (ctrl *UserController) ListUsers(c *gin.Context) {
 	}
 
 	response.Success(c, pageResp)
+}
+
+// ListMyArticles 获取“我的文章列表”
+func (ctrl *UserController) ListMyArticles(c *gin.Context) {
+	userID := middleware.GetUserID(c)
+	if userID == 0 {
+		response.Unauthorized(c, "用户未登录")
+		return
+	}
+	var q request.MyArticleListQuery
+	if err := c.ShouldBindQuery(&q); err != nil {
+		response.BadRequest(c, "分页参数不正确："+err.Error())
+		return
+	}
+	page, err := ctrl.articleService.ListMyArticles(c.Request.Context(), userID, &q)
+	if err != nil {
+		response.BizError(c, err)
+		return
+	}
+	response.Success(c, page)
 }
