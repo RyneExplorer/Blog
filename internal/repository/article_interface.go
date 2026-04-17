@@ -24,6 +24,10 @@ type ArticleRepository interface {
 	UpdateByAuthorWithCategoriesInTx(ctx context.Context, id uint, userID uint, updates map[string]interface{}, categoryIDs []uint) (bool, error)
 	UpdateStatusByAuthor(ctx context.Context, id uint, userID uint, status int) (bool, error)
 	DeleteByAuthorInTx(ctx context.Context, id uint, userID uint) (bool, error)
+
+	// 用户收藏模块
+	ListFavoritesWithJoin(ctx context.Context, userID uint, offset, limit int, categoryID *uint, sort string) ([]MyArticleListJoinRow, error)
+	CountFavorites(ctx context.Context, userID uint, categoryID *uint) (int64, error)
 }
 
 // ArticleListJoinRow 列表 JOIN 扫描行

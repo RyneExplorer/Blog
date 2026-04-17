@@ -8,7 +8,21 @@ type UserResponse struct {
 	Username  string    `json:"username"`
 	Email     string    `json:"email"`
 	Nickname  string    `json:"nickname"`
+	Bio       string    `json:"bio"`
 	Avatar    string    `json:"avatar"`
+	Status    int       `json:"status"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+// AdminUserListItem 管理员用户列表项
+type AdminUserListItem struct {
+	ID        uint      `json:"id"`
+	Username  string    `json:"username"`
+	Email     string    `json:"email"`
+	Avatar    string    `json:"avatar"`
+	Role      int       `json:"role"`
+	Nickname  string    `json:"nickname"`
 	Status    int       `json:"status"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
@@ -18,10 +32,4 @@ type UserResponse struct {
 type LoginResponse struct {
 	Token string       `json:"token"`
 	User  UserResponse `json:"user"`
-}
-
-// UserInfoResponse 用户信息响应
-type UserInfoResponse struct {
-	UserID   uint   `json:"user_id"`
-	Username string `json:"username"`
 }

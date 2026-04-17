@@ -9,11 +9,12 @@ import (
 	"blog/internal/api/user"
 	"blog/internal/middleware"
 	"blog/internal/service"
+	"blog/pkg/upload"
 
 	"github.com/gin-gonic/gin"
 )
 
-// Router 路由
+// Router 应用路由集合
 type Router struct {
 	userCtrl     *user.UserController
 	authCtrl     *auth.AuthController
@@ -23,7 +24,7 @@ type Router struct {
 	superCtrl    *super.ReviewController
 }
 
-// NewRouter 创建路由
+// NewRouter 创建路由对象
 func NewRouter(
 	userService service.UserService,
 	authService service.AuthService,
@@ -33,23 +34,25 @@ func NewRouter(
 	reviewService service.ReviewService,
 ) *Router {
 	return &Router{
-		userCtrl:     user.NewUserController(userService, articleService),
+		userCtrl:     user.NewUserController(userService),
 		authCtrl:     auth.NewAuthController(authService, userService),
 		articleCtrl:  article.NewArticleController(articleService, commentService),
 		commentCtrl:  comment.NewCommentController(commentService),
 		categoryCtrl: category.NewCategoryController(categoryService),
-		superCtrl:    super.NewReviewController(reviewService),
+		superCtrl:    super.NewReviewController(reviewService, userService),
 	}
 }
 
-// Setup 设置路由
+// Setup 注册所有路由
 func (r *Router) Setup(engine *gin.Engine) {
-	// 全局中间件
 	engine.Use(middleware.Recovery())
 	engine.Use(middleware.Logger())
 	engine.Use(middleware.CORS())
+	if err := upload.EnsureBaseDir(); err != nil {
+		panic(err)
+	}
+	engine.Static("/uploads", "./uploads")
 
-	// 健康检查
 	engine.GET("/api/health", func(c *gin.Context) {
 		c.JSON(200, gin.H{
 			"status":  "ok",
@@ -57,20 +60,13 @@ func (r *Router) Setup(engine *gin.Engine) {
 		})
 	})
 
-	// API 路由组
 	v1 := engine.Group("/api")
 	{
-		// 认证路由
 		r.authCtrl.RegisterRoutes(v1)
-		// 用户路由
 		r.userCtrl.RegisterRoutes(v1)
-		// 文章路由
 		r.articleCtrl.RegisterRoutes(v1)
-		// 评论路由
 		r.commentCtrl.RegisterRoutes(v1)
-		// 分类路由
 		r.categoryCtrl.RegisterRoutes(v1)
-		// 管理员审核路由
 		r.superCtrl.RegisterRoutes(v1)
 	}
 }

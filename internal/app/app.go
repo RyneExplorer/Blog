@@ -144,7 +144,7 @@ func (a *App) initDependencies() {
 
 	// 创建 Service
 	userSvc := service.NewUserService(userRepo)
-	authSvc := service.NewAuthService(userRepo, userSvc)
+	authSvc := service.NewAuthService(userRepo, userSvc, a.redis)
 	articleSvc := service.NewArticleService(articleRepo, likeRepo, favoriteRepo)
 	commentSvc := service.NewCommentService(commentRepo, articleRepo, likeRepo)
 	categorySvc := service.NewCategoryService(categoryRepo)

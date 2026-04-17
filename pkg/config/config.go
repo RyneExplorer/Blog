@@ -9,14 +9,16 @@ type Config struct {
 	JWT      JWTConfig      `mapstructure:"jwt"`
 	Log      LogConfig      `mapstructure:"log"`
 	CORS     CORSConfig     `mapstructure:"cors"`
+	Email    EmailConfig    `mapstructure:"email"`
 }
 
 // AppConfig 应用配置
 type AppConfig struct {
-	Name    string `mapstructure:"name"`
-	Version string `mapstructure:"version"`
-	Mode    string `mapstructure:"mode"` // debug, release, test
-	Port    int    `mapstructure:"port"`
+	Name      string `mapstructure:"name"`
+	Version   string `mapstructure:"version"`
+	Mode      string `mapstructure:"mode"` // debug, release, test
+	Port      int    `mapstructure:"port"`
+	AESSecret string `mapstructure:"aes_secret"`
 }
 
 // DatabaseConfig 数据库配置
@@ -70,4 +72,11 @@ type CORSConfig struct {
 	ExposeHeaders    []string `mapstructure:"expose_headers"`
 	AllowCredentials bool     `mapstructure:"allow_credentials"`
 	MaxAge           int      `mapstructure:"max_age"`
+}
+
+type EmailConfig struct {
+	Host     string `mapstructure:"host"`
+	Port     int    `mapstructure:"port"`
+	Username string `mapstructure:"username"`
+	Password string `mapstructure:"password"`
 }

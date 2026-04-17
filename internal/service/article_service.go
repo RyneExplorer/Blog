@@ -29,6 +29,7 @@ type ArticleService interface {
 
 	// 用户文章模块
 	ListMyArticles(ctx context.Context, userID uint, q *request.MyArticleListQuery) (*response.PageResponse, error)
+	ListMyFavorites(ctx context.Context, userID uint, q *request.MyArticleListQuery) (*response.PageResponse, error)
 	CreateDraft(ctx context.Context, userID uint, req *request.CreateArticleRequest) (uint, error)
 	UpdateDraft(ctx context.Context, userID uint, articleID uint, req *request.UpdateArticleRequest) error
 	Publish(ctx context.Context, userID uint, articleID uint) error
@@ -219,6 +220,54 @@ func (s *articleService) ListMyArticles(ctx context.Context, userID uint, q *req
 		return nil, err
 	}
 	rows, err := s.articleRepo.ListByUserWithJoin(ctx, userID, offset, q.PageSize, q.CategoryID, sort)
+	if err != nil {
+		return nil, err
+	}
+	list := make([]dto.MyArticleListItem, 0, len(rows))
+	for _, row := range rows {
+		summary := strings.TrimSpace(row.Summary.String)
+		if summary == "" {
+			summary = utils.TruncateRunes(row.Content, 100)
+		}
+		cat := dto.CategoryBrief{}
+		if row.CategoryRefID.Valid {
+			cat = dto.CategoryBrief{
+				ID:   uint(row.CategoryRefID.Int64),
+				Name: row.CategoryName,
+				Slug: row.CategorySlug,
+			}
+		}
+		list = append(list, dto.MyArticleListItem{
+			Article: dto.ArticleBrief{
+				ID:            row.ID,
+				Title:         row.Title,
+				Summary:       summary,
+				CoverImage:    row.CoverImage,
+				Status:        row.Status,
+				ViewCount:     row.ViewCount,
+				LikeCount:     int(row.LikeCount),
+				FavoriteCount: int(row.FavoriteCount),
+				CommentCount:  int(row.CommentCount),
+				CreatedAt:     formatDateTime(row.CreatedAt),
+				UpdatedAt:     formatDateTime(row.UpdatedAt),
+			},
+			Category: cat,
+		})
+	}
+	return response.NewPageResponse(list, total, q.Page, q.PageSize), nil
+}
+
+func (s *articleService) ListMyFavorites(ctx context.Context, userID uint, q *request.MyArticleListQuery) (*response.PageResponse, error) {
+	sort := q.Sort
+	if sort == "" {
+		sort = "latest"
+	}
+	offset := (q.Page - 1) * q.PageSize
+	total, err := s.articleRepo.CountFavorites(ctx, userID, q.CategoryID)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := s.articleRepo.ListFavoritesWithJoin(ctx, userID, offset, q.PageSize, q.CategoryID, sort)
 	if err != nil {
 		return nil, err
 	}

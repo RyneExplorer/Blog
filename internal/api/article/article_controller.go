@@ -7,17 +7,18 @@ import (
 	"blog/internal/model/dto/request"
 	"blog/internal/service"
 	"blog/pkg/response"
+	"blog/pkg/upload"
 
 	"github.com/gin-gonic/gin"
 )
 
-// ArticleController 文章控制器
+// ArticleController handles article endpoints.
 type ArticleController struct {
 	articleService service.ArticleService
 	commentService service.CommentService
 }
 
-// NewArticleController 创建文章控制器
+// NewArticleController creates an article controller.
 func NewArticleController(articleService service.ArticleService, commentService service.CommentService) *ArticleController {
 	return &ArticleController{
 		articleService: articleService,
@@ -52,15 +53,34 @@ func (ctrl *ArticleController) List(c *gin.Context) {
 	response.Success(c, page)
 }
 
-// Detail 文章详情
+// UploadCover 上传文章封面
+func (ctrl *ArticleController) UploadCover(c *gin.Context) {
+	userID := middleware.GetUserID(c)
+	if userID == 0 {
+		response.Unauthorized(c, "用户未登录")
+		return
+	}
+
+	result, err := upload.SaveImage(c, "file", "article")
+	if err != nil {
+		response.BadRequest(c, err.Error())
+		return
+	}
+
+	response.Success(c, gin.H{
+		"cover_image": result.URL,
+		"url":         result.URL,
+	})
+}
+
+// Detail 获取首页文章详情
 func (ctrl *ArticleController) Detail(c *gin.Context) {
 	id, ok := parseUintParam(c, "id")
 	if !ok {
 		response.BadRequest(c, "文章 ID 无效")
 		return
 	}
-	viewerUserID := middleware.GetUserID(c)
-	data, err := ctrl.articleService.GetArticleDetail(c.Request.Context(), id, viewerUserID)
+	data, err := ctrl.articleService.GetArticleDetail(c.Request.Context(), id, 0)
 	if err != nil {
 		response.BizError(c, err)
 		return
@@ -68,7 +88,67 @@ func (ctrl *ArticleController) Detail(c *gin.Context) {
 	response.Success(c, data)
 }
 
-// Create POST /api/articles 创建文章（草稿）
+// MyDetail 获取我的文章详情
+func (ctrl *ArticleController) MyDetail(c *gin.Context) {
+	userID := middleware.GetUserID(c)
+	if userID == 0 {
+		response.Unauthorized(c, "用户未登录")
+		return
+	}
+	id, ok := parseUintParam(c, "id")
+	if !ok {
+		response.BadRequest(c, "文章 ID 无效")
+		return
+	}
+	data, err := ctrl.articleService.GetArticleDetail(c.Request.Context(), id, userID)
+	if err != nil {
+		response.BizError(c, err)
+		return
+	}
+	response.Success(c, data)
+}
+
+// ListMyArticles 获取我的文章列表
+func (ctrl *ArticleController) ListMyArticles(c *gin.Context) {
+	userID := middleware.GetUserID(c)
+	if userID == 0 {
+		response.Unauthorized(c, "用户未登录")
+		return
+	}
+	var q request.MyArticleListQuery
+	if err := c.ShouldBindQuery(&q); err != nil {
+		response.BadRequest(c, "分页参数不正确："+err.Error())
+		return
+	}
+	page, err := ctrl.articleService.ListMyArticles(c.Request.Context(), userID, &q)
+	if err != nil {
+		response.BizError(c, err)
+		return
+	}
+	response.Success(c, page)
+}
+
+// ListFavorites 获取我的收藏列表
+func (ctrl *ArticleController) ListFavorites(c *gin.Context) {
+	userID := middleware.GetUserID(c)
+	if userID == 0 {
+		response.Unauthorized(c, "用户未登录")
+		return
+	}
+	var q request.MyArticleListQuery
+	if err := c.ShouldBindQuery(&q); err != nil {
+		response.BadRequest(c, "分页参数不正确："+err.Error())
+		return
+	}
+	page, err := ctrl.articleService.ListMyFavorites(c.Request.Context(), userID, &q)
+	if err != nil {
+		response.BizError(c, err)
+		return
+	}
+	response.Success(c, page)
+}
+
+// Create 创建文章草稿
 func (ctrl *ArticleController) Create(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 	if userID == 0 {
@@ -88,7 +168,7 @@ func (ctrl *ArticleController) Create(c *gin.Context) {
 	response.Success(c, gin.H{"article_id": id})
 }
 
-// Update PUT /api/articles/:id 更新文章（自动保存草稿）
+// Update 更新文章
 func (ctrl *ArticleController) Update(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 	if userID == 0 {
@@ -112,7 +192,7 @@ func (ctrl *ArticleController) Update(c *gin.Context) {
 	response.Success(c, nil)
 }
 
-// Publish POST /api/articles/:id/publish 发布文章（待审核）
+// Publish 发布文章
 func (ctrl *ArticleController) Publish(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 	if userID == 0 {
@@ -131,7 +211,7 @@ func (ctrl *ArticleController) Publish(c *gin.Context) {
 	response.Success(c, nil)
 }
 
-// Delete DELETE /api/articles/:id 删除文章
+// Delete 删除文章
 func (ctrl *ArticleController) Delete(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 	if userID == 0 {
@@ -150,7 +230,7 @@ func (ctrl *ArticleController) Delete(c *gin.Context) {
 	response.Success(c, nil)
 }
 
-// ListComments GET /api/articles/:id/comments
+// ListComments 获取文章评论列表
 func (ctrl *ArticleController) ListComments(c *gin.Context) {
 	articleID, ok := parseUintParam(c, "id")
 	if !ok {
@@ -170,7 +250,7 @@ func (ctrl *ArticleController) ListComments(c *gin.Context) {
 	response.Success(c, page)
 }
 
-// IncrView 浏览量 +1
+// IncrView 增加文章浏览量
 func (ctrl *ArticleController) IncrView(c *gin.Context) {
 	id, ok := parseUintParam(c, "id")
 	if !ok {

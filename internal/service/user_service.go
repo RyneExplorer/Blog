@@ -1,6 +1,8 @@
 package service
 
 import (
+	"strings"
+
 	"blog/internal/model/dto/request"
 	dto "blog/internal/model/dto/response"
 	"blog/internal/model/entity"
@@ -9,6 +11,15 @@ import (
 	"blog/pkg/response"
 	"golang.org/x/crypto/bcrypt"
 )
+
+// UserService 用户服务接口
+type UserService interface {
+	GetUserByID(id uint) (*entity.User, error)
+	UpdateUser(id uint, req *request.UpdateUserRequest) error
+	ChangePassword(id uint, req *request.ChangePasswordRequest) error
+	GetUserResponse(user *entity.User) *dto.UserResponse
+	AdminListUsers(adminID uint, req *request.AdminUserListRequest) (*response.PageResponse, error)
+}
 
 // userService 用户服务实现
 type userService struct {
@@ -24,7 +35,6 @@ func NewUserService(userRepo repository.UserRepository) UserService {
 
 // Register 用户注册
 func (s *userService) Register(req *request.RegisterRequest) error {
-	// 检查用户名是否存在
 	exists, err := s.userRepo.ExistsByUsername(req.Username)
 	if err != nil {
 		return err
@@ -33,7 +43,6 @@ func (s *userService) Register(req *request.RegisterRequest) error {
 		return bizerrors.ErrUserAlreadyExists
 	}
 
-	// 检查邮箱是否存在
 	exists, err = s.userRepo.ExistsByEmail(req.Email)
 	if err != nil {
 		return err
@@ -42,19 +51,16 @@ func (s *userService) Register(req *request.RegisterRequest) error {
 		return bizerrors.New(bizerrors.CodeUserAlreadyExists, "邮箱已被注册")
 	}
 
-	// 加密密码
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 	if err != nil {
 		return err
 	}
 
-	// 创建用户
 	user := &entity.User{
 		Username: req.Username,
 		Password: string(hashedPassword),
 		Email:    req.Email,
-		Nickname: req.Nickname,
-		Status:   1, // 默认正常
+		Status:   1,
 	}
 
 	if err := s.userRepo.Create(user); err != nil {
@@ -83,12 +89,27 @@ func (s *userService) UpdateUser(id uint, req *request.UpdateUserRequest) error 
 		return err
 	}
 
-	// 更新字段
 	if req.Nickname != "" {
 		user.Nickname = req.Nickname
 	}
 	if req.Avatar != "" {
 		user.Avatar = req.Avatar
+	}
+	if req.Bio != "" {
+		user.Bio = req.Bio
+	}
+	if req.Email != "" {
+		newEmail := strings.TrimSpace(req.Email)
+		if newEmail != "" && newEmail != user.Email {
+			other, err := s.userRepo.FindByEmail(newEmail)
+			if err != nil {
+				return err
+			}
+			if other != nil && other.ID != user.ID {
+				return bizerrors.New(bizerrors.CodeUserAlreadyExists, "邮箱已被注册")
+			}
+			user.Email = newEmail
+		}
 	}
 
 	return s.userRepo.Update(user)
@@ -101,12 +122,10 @@ func (s *userService) ChangePassword(id uint, req *request.ChangePasswordRequest
 		return err
 	}
 
-	// 验证旧密码
 	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(req.OldPassword)); err != nil {
 		return bizerrors.ErrInvalidCredentials
 	}
 
-	// 加密新密码
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.NewPassword), bcrypt.DefaultCost)
 	if err != nil {
 		return err
@@ -116,13 +135,14 @@ func (s *userService) ChangePassword(id uint, req *request.ChangePasswordRequest
 	return s.userRepo.Update(user)
 }
 
-// GetUserResponse 获取用户响应
+// GetUserResponse 构造用户响应对象
 func (s *userService) GetUserResponse(user *entity.User) *dto.UserResponse {
 	return &dto.UserResponse{
 		ID:        user.ID,
 		Username:  user.Username,
 		Email:     user.Email,
 		Nickname:  user.Nickname,
+		Bio:       user.Bio,
 		Avatar:    user.Avatar,
 		Status:    user.Status,
 		CreatedAt: user.CreatedAt,
@@ -130,35 +150,63 @@ func (s *userService) GetUserResponse(user *entity.User) *dto.UserResponse {
 	}
 }
 
-// ListUsers 分页获取用户列表
-func (s *userService) ListUsers(req *request.UserListRequest) (*response.PageResponse, error) {
-	// 参数标准化
+func (s *userService) assertAdmin(adminID uint) error {
+	admin, err := s.GetUserByID(adminID)
+	if err != nil {
+		return err
+	}
+	if admin.Role != 0 {
+		return bizerrors.ErrForbidden
+	}
+	return nil
+}
+
+// AdminListUsers 管理员分页查询用户列表
+func (s *userService) AdminListUsers(adminID uint, req *request.AdminUserListRequest) (*response.PageResponse, error) {
+	if err := s.assertAdmin(adminID); err != nil {
+		return nil, err
+	}
+
 	page := req.Page
 	if page < 1 {
 		page = 1
 	}
-	size := req.Size
-	if size < 1 {
-		size = 10
+	pageSize := req.PageSize
+	if pageSize < 1 {
+		pageSize = 10
 	}
-	if size > 100 {
-		size = 100
+	if pageSize > 100 {
+		pageSize = 100
 	}
 
-	// 计算偏移量
-	offset := (page - 1) * size
+	if req.Status != nil && *req.Status != 1 && *req.Status != 2 {
+		return nil, bizerrors.New(bizerrors.CodeInvalidParam, "status 只能是 1 或 2")
+	}
 
-	// 查询数据
-	users, total, err := s.userRepo.List(offset, size)
+	offset := (page - 1) * pageSize
+	users, total, err := s.userRepo.AdminList(offset, pageSize, &repository.UserListFilter{
+		Username: req.Username,
+		Nickname: req.Nickname,
+		Status:   req.Status,
+	})
 	if err != nil {
 		return nil, err
 	}
 
-	// 转换为响应 DTO
-	list := make([]*dto.UserResponse, 0, len(users))
+	list := make([]*dto.AdminUserListItem, 0, len(users))
 	for _, user := range users {
-		list = append(list, s.GetUserResponse(user))
+		list = append(list, &dto.AdminUserListItem{
+			ID:        user.ID,
+			Username:  user.Username,
+			Email:     user.Email,
+			Avatar:    user.Avatar,
+			Role:      user.Role,
+			Nickname:  user.Nickname,
+			Status:    user.Status,
+			CreatedAt: user.CreatedAt,
+			UpdatedAt: user.UpdatedAt,
+		})
 	}
 
-	return response.NewPageResponse(list, total, page, size), nil
+	return response.NewPageResponse(list, total, page, pageSize), nil
 }

@@ -3,9 +3,14 @@ package auth
 import (
 	"blog/internal/model/dto/request"
 	"blog/internal/service"
+	"blog/pkg/captcha"
 	"blog/pkg/response"
 
+	"blog/internal/middleware"
+	"blog/pkg/logger"
 	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
+	"regexp"
 )
 
 // AuthController 认证控制器
@@ -22,14 +27,33 @@ func NewAuthController(authService service.AuthService, userService service.User
 	}
 }
 
+// Register 用户注册
 func (ctrl *AuthController) Register(c *gin.Context) {
 	var req request.RegisterRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		response.BadRequest(c, err.Error())
+		response.BadRequest(c, "数据参数格式错误!")
+		return
+	}
+	if req.Password != req.ConfirmPassword {
+		response.BadRequest(c, "密码不一致")
+		return
+	}
+	// 用户名校验
+	var regexpAlphaNum = regexp.MustCompile(`^[a-zA-Z0-9]+$`)
+	if !regexpAlphaNum.MatchString(req.Username) {
+		response.BadRequest(c, "用户名只能包含字母或数字")
 		return
 	}
 
-	if err := ctrl.userService.Register(&req); err != nil {
+	// 邮箱校验
+	qqEmailRegex := regexp.MustCompile(`^[a-zA-Z0-9]([a-zA-Z0-9_.]{2,14})[a-zA-Z0-9]@qq\.com$`)
+	if qqEmailRegex.MatchString(req.Email) == false {
+		response.BadRequest(c, "目前仅支持qq邮箱")
+		return
+	}
+
+	if err := ctrl.authService.Register(&req); err != nil {
+		logger.Errorf("用户注册失败:", zap.String("username", req.Username), zap.Error(err))
 		response.BizError(c, err)
 		return
 	}
@@ -42,6 +66,12 @@ func (ctrl *AuthController) Login(c *gin.Context) {
 	var req request.LoginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.BadRequest(c, err.Error())
+		return
+	}
+
+	var regexpAlphaNum = regexp.MustCompile(`^[a-zA-Z0-9]+$`)
+	if !regexpAlphaNum.MatchString(req.Username) {
+		response.BadRequest(c, "用户名只能包含字母或数字")
 		return
 	}
 
@@ -70,5 +100,66 @@ func (ctrl *AuthController) RefreshToken(c *gin.Context) {
 
 	response.Success(c, map[string]string{
 		"token": newToken,
+	})
+}
+
+// SendEmailCode 发送邮箱验证码
+func (ctrl *AuthController) SendEmailCode(c *gin.Context) {
+	var req request.SendEmailCodeRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "邮箱格式错误!")
+		return
+	}
+	if err := ctrl.authService.SendEmailCode(req.Email); err != nil {
+		response.BizError(c, err)
+		return
+	}
+	response.Success(c, nil)
+}
+
+// Logout 用户登出
+func (ctrl *AuthController) Logout(c *gin.Context) {
+	userID := middleware.GetUserID(c)
+	if userID == 0 {
+		response.Unauthorized(c, "未登录或Token无效")
+		return
+	}
+
+	if err := ctrl.authService.Logout(userID); err != nil {
+		response.BizError(c, err)
+		return
+	}
+
+	response.Success(c, "登出成功")
+}
+
+// ResetPassword 重置密码
+func (ctrl *AuthController) ResetPassword(c *gin.Context) {
+	var req request.ResetPasswordRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, err.Error())
+		return
+	}
+	if req.NewPassword != req.ConfirmPassword {
+		response.BadRequest(c, "两次输入密码不一致")
+		return
+	}
+	if err := ctrl.authService.ResetPassword(&req); err != nil {
+		response.BizError(c, err)
+		return
+	}
+	response.Success(c, nil)
+}
+
+// GetCaptcha 获取验证码
+func (ctrl *AuthController) GetCaptcha(c *gin.Context) {
+	id, b64s, err := captcha.GenerateCaptcha()
+	if err != nil {
+		response.InternalError(c, "生成图形验证码失败，请刷新重试")
+		return
+	}
+	response.Success(c, gin.H{
+		"captcha_id": id,
+		"captcha":    b64s,
 	})
 }

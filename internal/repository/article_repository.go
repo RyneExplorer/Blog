@@ -152,6 +152,47 @@ func (r *articleRepository) CountByUser(ctx context.Context, userID uint, catego
 	return total, nil
 }
 
+func (r *articleRepository) baseFavoritesQuery(ctx context.Context, userID uint, categoryID *uint) *gorm.DB {
+	q := r.db.WithContext(ctx).Table("articles").
+		Select(`articles.id, articles.title, articles.content, articles.summary, articles.cover_image, articles.status,
+			articles.view_count, articles.like_count, articles.favorite_count, articles.comment_count,
+			articles.created_at, articles.updated_at,
+			categories.id AS category_ref_id, categories.name AS category_name, categories.slug AS category_slug`).
+		Joins(`INNER JOIN favorites f ON f.article_id = articles.id AND f.user_id = ?`, userID).
+		Joins(`LEFT JOIN article_categories ac ON ac.article_id = articles.id AND ac.category_id = (
+			SELECT MIN(ac2.category_id) FROM article_categories ac2 WHERE ac2.article_id = articles.id
+		)`).
+		Joins("LEFT JOIN categories ON categories.id = ac.category_id")
+	if categoryID != nil {
+		q = q.Where("articles.id IN (SELECT article_id FROM article_categories WHERE category_id = ?)", *categoryID)
+	}
+	return q
+}
+
+func (r *articleRepository) ListFavoritesWithJoin(ctx context.Context, userID uint, offset, limit int, categoryID *uint, sort string) ([]MyArticleListJoinRow, error) {
+	q := r.baseFavoritesQuery(ctx, userID, categoryID).Session(&gorm.Session{})
+	switch sort {
+	case "hottest":
+		q = q.Order("articles.view_count DESC, articles.created_at DESC")
+	default:
+		q = q.Order("articles.created_at DESC")
+	}
+	var rows []MyArticleListJoinRow
+	if err := q.Offset(offset).Limit(limit).Scan(&rows).Error; err != nil {
+		return nil, err
+	}
+	return rows, nil
+}
+
+func (r *articleRepository) CountFavorites(ctx context.Context, userID uint, categoryID *uint) (int64, error) {
+	q := r.baseFavoritesQuery(ctx, userID, categoryID)
+	var total int64
+	if err := q.Count(&total).Error; err != nil {
+		return 0, err
+	}
+	return total, nil
+}
+
 func (r *articleRepository) GetByIDWithCategories(ctx context.Context, id uint) (*entity.Article, error) {
 	var a entity.Article
 	err := r.db.WithContext(ctx).Model(&entity.Article{}).

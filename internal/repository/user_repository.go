@@ -2,6 +2,7 @@ package repository
 
 import (
 	"errors"
+	"strings"
 
 	"blog/internal/model/entity"
 
@@ -72,19 +73,31 @@ func (r *userRepository) Delete(id uint) error {
 	return r.db.Delete(&entity.User{}, id).Error
 }
 
-// List 分页获取用户列表
-func (r *userRepository) List(offset, limit int) ([]*entity.User, int64, error) {
-	var users []*entity.User
-	var total int64
+// AdminList 管理员分页获取用户列表
+func (r *userRepository) AdminList(offset, limit int, filter *UserListFilter) ([]*entity.User, int64, error) {
+	var (
+		users []*entity.User
+		total int64
+	)
 
-	// 统计总数
-	if err := r.db.Model(&entity.User{}).Count(&total).Error; err != nil {
+	q := r.db.Model(&entity.User{})
+	if filter != nil {
+		if username := strings.TrimSpace(filter.Username); username != "" {
+			q = q.Where("username LIKE ?", "%"+username+"%")
+		}
+		if nickname := strings.TrimSpace(filter.Nickname); nickname != "" {
+			q = q.Where("nickname LIKE ?", "%"+nickname+"%")
+		}
+		if filter.Status != nil {
+			q = q.Where("status = ?", *filter.Status)
+		}
+	}
+
+	if err := q.Count(&total).Error; err != nil {
 		return nil, 0, err
 	}
 
-	// 分页查询
-	err := r.db.Order("created_at DESC").Offset(offset).Limit(limit).Find(&users).Error
-	if err != nil {
+	if err := q.Order("created_at DESC").Offset(offset).Limit(limit).Find(&users).Error; err != nil {
 		return nil, 0, err
 	}
 

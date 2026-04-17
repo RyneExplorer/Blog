@@ -11,10 +11,15 @@ func (ctrl *CommentController) RegisterRoutes(r *gin.RouterGroup) {
 	g := r.Group("/comments")
 	g.Use(middleware.Auth())
 	{
+		// 发布评论
 		g.POST("", ctrl.Create)
-		g.POST("/reply", ctrl.Reply)
-		g.DELETE("/:id", ctrl.Delete)
+		// 回复评论
+		g.POST("/replies", ctrl.Reply)
+		// 点赞评论
 		g.POST("/:id/like", ctrl.Like)
-		g.DELETE("/:id/like", ctrl.Unlike)
+		// 取消点赞评论
+		g.POST("/:id/unlike", ctrl.Unlike)
+		// 删除评论
+		g.DELETE("/:id", ctrl.Delete)
 	}
 }

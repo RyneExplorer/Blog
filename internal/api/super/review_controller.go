@@ -1,22 +1,28 @@
 package super
 
 import (
+	"strconv"
+
 	"blog/internal/middleware"
 	"blog/internal/model/dto/request"
 	"blog/internal/service"
 	"blog/pkg/response"
-	"strconv"
 
 	"github.com/gin-gonic/gin"
 )
 
-// ReviewController 管理员审核控制器
+// ReviewController 管理审核控制器
 type ReviewController struct {
 	reviewService service.ReviewService
+	userService   service.UserService
 }
 
-func NewReviewController(reviewService service.ReviewService) *ReviewController {
-	return &ReviewController{reviewService: reviewService}
+// NewReviewController 创建管理审核控制器
+func NewReviewController(reviewService service.ReviewService, userService service.UserService) *ReviewController {
+	return &ReviewController{
+		reviewService: reviewService,
+		userService:   userService,
+	}
 }
 
 func parseUintParam(c *gin.Context, key string) (uint, bool) {
@@ -31,7 +37,7 @@ func parseUintParam(c *gin.Context, key string) (uint, bool) {
 	return uint(v), true
 }
 
-// List GET /api/super/articles
+// List 获取审核文章列表
 func (ctrl *ReviewController) List(c *gin.Context) {
 	adminID := middleware.GetUserID(c)
 	if adminID == 0 {
@@ -51,7 +57,27 @@ func (ctrl *ReviewController) List(c *gin.Context) {
 	response.Success(c, page)
 }
 
-// Detail GET /api/super/articles/:id
+// ListUsers 获取用户列表
+func (ctrl *ReviewController) ListUsers(c *gin.Context) {
+	adminID := middleware.GetUserID(c)
+	if adminID == 0 {
+		response.Unauthorized(c, "请先登录")
+		return
+	}
+	var q request.AdminUserListRequest
+	if err := c.ShouldBindQuery(&q); err != nil {
+		response.BadRequest(c, "分页参数不正确："+err.Error())
+		return
+	}
+	page, err := ctrl.userService.AdminListUsers(adminID, &q)
+	if err != nil {
+		response.BizError(c, err)
+		return
+	}
+	response.Success(c, page)
+}
+
+// Detail 获取审核文章详情
 func (ctrl *ReviewController) Detail(c *gin.Context) {
 	adminID := middleware.GetUserID(c)
 	if adminID == 0 {
@@ -71,7 +97,7 @@ func (ctrl *ReviewController) Detail(c *gin.Context) {
 	response.Success(c, data)
 }
 
-// Approve POST /api/super/articles/:id/approve
+// Approve 审核通过文章
 func (ctrl *ReviewController) Approve(c *gin.Context) {
 	adminID := middleware.GetUserID(c)
 	if adminID == 0 {
@@ -87,10 +113,10 @@ func (ctrl *ReviewController) Approve(c *gin.Context) {
 		response.BizError(c, err)
 		return
 	}
-	response.Success(c, nil)
+	response.Success(c, "通过成功")
 }
 
-// Reject POST /api/super/articles/:id/reject
+// Reject 驳回文章
 func (ctrl *ReviewController) Reject(c *gin.Context) {
 	adminID := middleware.GetUserID(c)
 	if adminID == 0 {
@@ -111,10 +137,10 @@ func (ctrl *ReviewController) Reject(c *gin.Context) {
 		response.BizError(c, err)
 		return
 	}
-	response.Success(c, nil)
+	response.Success(c, "驳回成功")
 }
 
-// Ban POST /api/super/articles/:id/ban
+// Ban 封禁文章
 func (ctrl *ReviewController) Ban(c *gin.Context) {
 	adminID := middleware.GetUserID(c)
 	if adminID == 0 {
@@ -132,10 +158,10 @@ func (ctrl *ReviewController) Ban(c *gin.Context) {
 		response.BizError(c, err)
 		return
 	}
-	response.Success(c, nil)
+	response.Success(c, "封禁成功")
 }
 
-// UpdateCategory PUT /api/super/articles/:id/category
+// UpdateCategory 更新文章分类
 func (ctrl *ReviewController) UpdateCategory(c *gin.Context) {
 	adminID := middleware.GetUserID(c)
 	if adminID == 0 {
@@ -156,5 +182,5 @@ func (ctrl *ReviewController) UpdateCategory(c *gin.Context) {
 		response.BizError(c, err)
 		return
 	}
-	response.Success(c, nil)
+	response.Success(c, "更新成功")
 }
