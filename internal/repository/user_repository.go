@@ -64,8 +64,14 @@ func (r *userRepository) Create(user *entity.User) error {
 }
 
 // Update 更新用户
-func (r *userRepository) Update(user *entity.User) error {
-	return r.db.Save(user).Error
+func (r *userRepository) Update(id uint, updates map[string]interface{}) error {
+	if len(updates) == 0 {
+		return nil
+	}
+
+	return r.db.Model(&entity.User{}).
+		Where("id = ?", id).
+		Updates(updates).Error
 }
 
 // Delete 删除用户

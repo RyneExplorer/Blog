@@ -80,8 +80,9 @@ func (s *authService) ResetPassword(req *request.ResetPasswordRequest) error {
 	if err != nil {
 		return err
 	}
-	user.Password = string(hashedPassword)
-	return s.userRepo.Update(user)
+	return s.userRepo.Update(user.ID, map[string]interface{}{
+		"password": string(hashedPassword),
+	})
 }
 
 // NewAuthService 创建认证服务

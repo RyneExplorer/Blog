@@ -89,14 +89,16 @@ func (s *userService) UpdateUser(id uint, req *request.UpdateUserRequest) error 
 		return err
 	}
 
-	if req.Nickname != "" {
-		user.Nickname = req.Nickname
+	updates := map[string]interface{}{}
+
+	if nickname := strings.TrimSpace(req.Nickname); nickname != "" {
+		updates["nickname"] = nickname
 	}
-	if req.Avatar != "" {
-		user.Avatar = req.Avatar
+	if avatar := strings.TrimSpace(req.Avatar); avatar != "" {
+		updates["avatar"] = avatar
 	}
-	if req.Bio != "" {
-		user.Bio = req.Bio
+	if bio := strings.TrimSpace(req.Bio); bio != "" {
+		updates["bio"] = bio
 	}
 	if req.Email != "" {
 		newEmail := strings.TrimSpace(req.Email)
@@ -108,11 +110,11 @@ func (s *userService) UpdateUser(id uint, req *request.UpdateUserRequest) error 
 			if other != nil && other.ID != user.ID {
 				return bizerrors.New(bizerrors.CodeUserAlreadyExists, "邮箱已被注册")
 			}
-			user.Email = newEmail
+			updates["email"] = newEmail
 		}
 	}
 
-	return s.userRepo.Update(user)
+	return s.userRepo.Update(id, updates)
 }
 
 // ChangePassword 修改密码
@@ -131,8 +133,9 @@ func (s *userService) ChangePassword(id uint, req *request.ChangePasswordRequest
 		return err
 	}
 
-	user.Password = string(hashedPassword)
-	return s.userRepo.Update(user)
+	return s.userRepo.Update(id, map[string]interface{}{
+		"password": string(hashedPassword),
+	})
 }
 
 // GetUserResponse 构造用户响应对象
