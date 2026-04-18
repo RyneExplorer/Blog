@@ -24,23 +24,11 @@ type ReviewService interface {
 
 type reviewService struct {
 	reviewRepo  repository.ReviewRepository
-	userRepo    repository.UserRepository
 	articleRepo repository.ArticleRepository
 }
 
-func NewReviewService(reviewRepo repository.ReviewRepository, userRepo repository.UserRepository, articleRepo repository.ArticleRepository) ReviewService {
-	return &reviewService{reviewRepo: reviewRepo, userRepo: userRepo, articleRepo: articleRepo}
-}
-
-func (s *reviewService) assertAdmin(ctx context.Context, adminID uint) error {
-	u, err := s.userRepo.FindByID(adminID)
-	if err != nil {
-		return err
-	}
-	if u == nil || u.Role != 0 {
-		return bizerrors.New(bizerrors.CodeForbidden, "无权限")
-	}
-	return nil
+func NewReviewService(reviewRepo repository.ReviewRepository, articleRepo repository.ArticleRepository) ReviewService {
+	return &reviewService{reviewRepo: reviewRepo, articleRepo: articleRepo}
 }
 
 func formatTime(t interface{ Format(string) string }) string {
@@ -48,33 +36,37 @@ func formatTime(t interface{ Format(string) string }) string {
 }
 
 func (s *reviewService) List(ctx context.Context, adminID uint, q *request.AdminArticleListRequest) (*response.PageResponse, error) {
-	if err := s.assertAdmin(ctx, adminID); err != nil {
-		return nil, err
-	}
+	_ = adminID
+
 	filter := &repository.AdminListFilter{
 		CategoryID: q.CategoryID,
 		Username:   strings.TrimSpace(q.Username),
 		Status:     q.Status,
 	}
+
 	offset := (q.Page - 1) * q.PageSize
 	total, err := s.reviewRepo.CountForAdmin(ctx, filter)
 	if err != nil {
 		return nil, err
 	}
+
 	rows, err := s.reviewRepo.ListForAdmin(ctx, filter, offset, q.PageSize)
 	if err != nil {
 		return nil, err
 	}
+
 	list := make([]dto.ArticleListItem, 0, len(rows))
 	for _, row := range rows {
 		summary := strings.TrimSpace(row.Summary.String)
 		if summary == "" {
 			summary = utils.TruncateRunes(row.Content, 100)
 		}
+
 		cat := dto.CategoryBrief{}
 		if row.CategoryRefID.Valid {
 			cat = dto.CategoryBrief{ID: uint(row.CategoryRefID.Int64), Name: row.CategoryName, Slug: row.CategorySlug}
 		}
+
 		list = append(list, dto.ArticleListItem{
 			Article: dto.ArticleBrief{
 				ID:            row.ID,
@@ -98,13 +90,14 @@ func (s *reviewService) List(ctx context.Context, adminID uint, q *request.Admin
 			Category: cat,
 		})
 	}
+
 	return response.NewPageResponse(list, total, q.Page, q.PageSize), nil
 }
 
 func (s *reviewService) Detail(ctx context.Context, adminID uint, articleID uint) (*dto.AdminArticleDetailResponse, error) {
-	if err := s.assertAdmin(ctx, adminID); err != nil {
-		return nil, err
-	}
+	_ = adminID
+
+	// 1. 先查询文章主信息，确认审核目标存在。
 	row, err := s.reviewRepo.GetDetail(ctx, articleID)
 	if err != nil {
 		return nil, err
@@ -112,10 +105,13 @@ func (s *reviewService) Detail(ctx context.Context, adminID uint, articleID uint
 	if row == nil {
 		return nil, bizerrors.New(bizerrors.CodeNotFound, "文章不存在")
 	}
+
+	// 2. 再补充文章分类信息，便于审核端完整展示。
 	a, err := s.articleRepo.GetByIDWithCategories(ctx, articleID)
 	if err != nil {
 		return nil, err
 	}
+
 	cats := make([]dto.CategoryBrief, 0)
 	if a != nil {
 		cats = make([]dto.CategoryBrief, 0, len(a.Categories))
@@ -123,6 +119,7 @@ func (s *reviewService) Detail(ctx context.Context, adminID uint, articleID uint
 			cats = append(cats, dto.CategoryBrief{ID: c.ID, Name: c.Name, Slug: c.Slug})
 		}
 	}
+
 	cids := make([]uint, 0)
 	if a != nil {
 		cids = make([]uint, 0, len(a.Categories))
@@ -130,11 +127,14 @@ func (s *reviewService) Detail(ctx context.Context, adminID uint, articleID uint
 			cids = append(cids, c.ID)
 		}
 	}
+
 	summary := strings.TrimSpace(row.Summary.String)
 	if summary == "" {
 		summary = utils.TruncateRunes(row.Content, 100)
 	}
 	rejectReason := strings.TrimSpace(row.RejectReason.String)
+
+	// 3. 最后统一组装审核详情响应。
 	return &dto.AdminArticleDetailResponse{
 		Article: dto.ArticleDetailResponse{
 			ID:            row.ID,
@@ -163,9 +163,6 @@ func (s *reviewService) Detail(ctx context.Context, adminID uint, articleID uint
 }
 
 func (s *reviewService) Approve(ctx context.Context, adminID uint, articleID uint) error {
-	if err := s.assertAdmin(ctx, adminID); err != nil {
-		return err
-	}
 	ok, err := s.reviewRepo.ApproveInTx(ctx, articleID, adminID)
 	if err != nil {
 		return err
@@ -177,9 +174,6 @@ func (s *reviewService) Approve(ctx context.Context, adminID uint, articleID uin
 }
 
 func (s *reviewService) Reject(ctx context.Context, adminID uint, articleID uint, reason string) error {
-	if err := s.assertAdmin(ctx, adminID); err != nil {
-		return err
-	}
 	ok, err := s.reviewRepo.RejectInTx(ctx, articleID, adminID, reason)
 	if err != nil {
 		return err
@@ -191,9 +185,6 @@ func (s *reviewService) Reject(ctx context.Context, adminID uint, articleID uint
 }
 
 func (s *reviewService) Ban(ctx context.Context, adminID uint, articleID uint, reason string) error {
-	if err := s.assertAdmin(ctx, adminID); err != nil {
-		return err
-	}
 	ok, err := s.reviewRepo.BanInTx(ctx, articleID, adminID, reason)
 	if err != nil {
 		return err
@@ -205,9 +196,6 @@ func (s *reviewService) Ban(ctx context.Context, adminID uint, articleID uint, r
 }
 
 func (s *reviewService) UpdateCategory(ctx context.Context, adminID uint, articleID uint, categoryIDs []uint) error {
-	if err := s.assertAdmin(ctx, adminID); err != nil {
-		return err
-	}
 	ok, err := s.reviewRepo.UpdateCategoriesInTx(ctx, articleID, categoryIDs, adminID)
 	if err != nil {
 		return err

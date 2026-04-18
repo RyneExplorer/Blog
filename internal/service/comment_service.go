@@ -50,10 +50,12 @@ func toCommentBlock(row repository.CommentJoinRow) dto.CommentBlock {
 	if row.ParentID.Valid {
 		parent = int(row.ParentID.Int64)
 	}
+
 	root := 0
 	if row.RootID.Valid {
 		root = int(row.RootID.Int64)
 	}
+
 	return dto.CommentBlock{
 		ID:         row.ID,
 		ParentID:   parent,
@@ -68,6 +70,7 @@ func toCommentBlock(row repository.CommentJoinRow) dto.CommentBlock {
 
 // ListByArticle 分页一级评论 + 子评论树
 func (s *commentService) ListByArticle(ctx context.Context, articleID uint, q *request.CommentListQuery) (*response.PageResponse, error) {
+	// 1. 先确认文章处于可见状态，避免未发布文章泄露评论内容。
 	ok, err := s.articleRepo.ExistsPublished(ctx, articleID)
 	if err != nil {
 		return nil, err
@@ -75,19 +78,24 @@ func (s *commentService) ListByArticle(ctx context.Context, articleID uint, q *r
 	if !ok {
 		return nil, bizerrors.New(bizerrors.CodeNotFound, "文章不存在")
 	}
+
 	total, err := s.commentRepo.CountRootsByArticle(ctx, articleID)
 	if err != nil {
 		return nil, err
 	}
+
 	offset := (q.Page - 1) * q.PageSize
+	// 2. 再按页查询一级评论及其子评论原始数据。
 	rows, err := s.commentRepo.ListJoinedByArticlePage(ctx, articleID, q.PageSize, offset)
 	if err != nil {
 		return nil, err
 	}
+
 	type wrap struct {
 		node *dto.CommentTreeNode
 		row  repository.CommentJoinRow
 	}
+
 	byID := make(map[uint]*wrap)
 	children := make(map[uint][]uint)
 	var rootIDs []uint
@@ -111,22 +119,26 @@ func (s *commentService) ListByArticle(ctx context.Context, articleID uint, q *r
 		}
 	}
 
+	// 3. 最后根据 parent_id 和 root_id 在内存中重建评论树。
 	var build func(id uint) *dto.CommentTreeNode
 	build = func(id uint) *dto.CommentTreeNode {
 		w := byID[id]
 		if w == nil {
 			return nil
 		}
+
 		childIDs := children[id]
 		sort.Slice(childIDs, func(i, j int) bool {
 			return byID[childIDs[i]].row.CreatedAt.Before(byID[childIDs[j]].row.CreatedAt)
 		})
+
 		for _, cid := range childIDs {
 			ch := build(cid)
 			if ch != nil {
 				w.node.Replies = append(w.node.Replies, ch)
 			}
 		}
+
 		return w.node
 	}
 
@@ -152,6 +164,7 @@ func (s *commentService) CreateComment(ctx context.Context, userID uint, req *re
 	if !ok {
 		return bizerrors.New(bizerrors.CodeNotFound, "文章不存在")
 	}
+
 	c := &entity.Comment{
 		ArticleID: req.ArticleID,
 		UserID:    userID,
@@ -172,6 +185,7 @@ func expectedRootID(parent *entity.Comment) uint {
 }
 
 func (s *commentService) ReplyComment(ctx context.Context, userID uint, req *request.ReplyCommentRequest) error {
+	// 1. 先确认目标文章已发布，回复动作不能落到不可见文章上。
 	ok, err := s.articleRepo.ExistsPublished(ctx, req.ArticleID)
 	if err != nil {
 		return err
@@ -179,6 +193,8 @@ func (s *commentService) ReplyComment(ctx context.Context, userID uint, req *req
 	if !ok {
 		return bizerrors.New(bizerrors.CodeNotFound, "文章不存在")
 	}
+
+	// 2. 再校验父评论存在、状态有效且属于当前文章。
 	parent, err := s.commentRepo.GetByID(ctx, req.ParentID)
 	if err != nil {
 		return err
@@ -186,10 +202,13 @@ func (s *commentService) ReplyComment(ctx context.Context, userID uint, req *req
 	if parent == nil || parent.ArticleID != req.ArticleID || parent.Status != 1 {
 		return bizerrors.New(bizerrors.CodeBadRequest, "父评论不存在或不属于该文章")
 	}
+
+	// 3. 最后核对 root_id 层级关系，并创建回复评论。
 	expRoot := expectedRootID(parent)
 	if req.RootID != expRoot {
 		return bizerrors.New(bizerrors.CodeBadRequest, "root_id 与评论层级不匹配")
 	}
+
 	pid := req.ParentID
 	rid := req.RootID
 	c := &entity.Comment{
@@ -204,6 +223,7 @@ func (s *commentService) ReplyComment(ctx context.Context, userID uint, req *req
 }
 
 func (s *commentService) DeleteComment(ctx context.Context, userID, commentID uint) error {
+	// 1. 先确认评论存在且属于当前用户本人。
 	c, err := s.commentRepo.GetByID(ctx, commentID)
 	if err != nil {
 		return err
@@ -214,6 +234,8 @@ func (s *commentService) DeleteComment(ctx context.Context, userID, commentID ui
 	if c.UserID != userID {
 		return bizerrors.New(bizerrors.CodeForbidden, "无权删除该评论")
 	}
+
+	// 2. 再判断是否还有子评论，避免直接删除后破坏评论树结构。
 	n, err := s.commentRepo.CountChildren(ctx, commentID)
 	if err != nil {
 		return err
@@ -221,6 +243,8 @@ func (s *commentService) DeleteComment(ctx context.Context, userID, commentID ui
 	if n > 0 {
 		return bizerrors.New(bizerrors.CodeBadRequest, "请先删除子评论后再删除本条评论")
 	}
+
+	// 3. 满足条件后执行删除，并同步回退文章和父评论计数。
 	return s.commentRepo.DeleteWithCountersInTx(ctx, c)
 }
 

@@ -26,7 +26,7 @@ func (r *commentRepository) CountRootsByArticle(ctx context.Context, articleID u
 	return n, err
 }
 
-// ListJoinedByArticlePage 一次查询取出当前页一级评论及其下所有子评论（CTE），并 JOIN 用户表
+// ListJoinedByArticlePage 一次查询取出当前页一级评论及其下所有子评论（CTE），并连表查询用户信息
 func (r *commentRepository) ListJoinedByArticlePage(ctx context.Context, articleID uint, limit, offset int) ([]CommentJoinRow, error) {
 	const q = `
 WITH roots AS (

@@ -25,7 +25,7 @@ type AdminListFilter struct {
 	Status     *int
 }
 
-// AdminArticleJoinRow 管理员列表 JOIN 行
+// AdminArticleJoinRow 管理员列表连表查询结果
 type AdminArticleJoinRow struct {
 	ID            uint           `gorm:"column:id"`
 	Title         string         `gorm:"column:title"`

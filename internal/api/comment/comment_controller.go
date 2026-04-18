@@ -33,7 +33,7 @@ func parseUintParam(c *gin.Context, key string) (uint, bool) {
 	return uint(v), true
 }
 
-// ListByArticle GET /api/articles/:id/comments
+// ListByArticle 获取文章评论列表接口
 func (ctrl *CommentController) ListByArticle(c *gin.Context) {
 	articleID, ok := parseUintParam(c, "id")
 	if !ok {
@@ -53,7 +53,7 @@ func (ctrl *CommentController) ListByArticle(c *gin.Context) {
 	response.Success(c, page)
 }
 
-// Create POST /api/comments
+// Create 发表评论接口
 func (ctrl *CommentController) Create(c *gin.Context) {
 	var req request.CreateCommentRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -72,7 +72,7 @@ func (ctrl *CommentController) Create(c *gin.Context) {
 	response.Success(c, nil)
 }
 
-// Reply POST /api/comments/reply
+// Reply 回复评论接口
 func (ctrl *CommentController) Reply(c *gin.Context) {
 	var req request.ReplyCommentRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -91,7 +91,7 @@ func (ctrl *CommentController) Reply(c *gin.Context) {
 	response.Success(c, nil)
 }
 
-// Delete DELETE /api/comments/:id
+// Delete 删除评论接口
 func (ctrl *CommentController) Delete(c *gin.Context) {
 	id, ok := parseUintParam(c, "id")
 	if !ok {
@@ -110,7 +110,7 @@ func (ctrl *CommentController) Delete(c *gin.Context) {
 	response.Success(c, nil)
 }
 
-// Like POST /api/comments/:id/like
+// Like 评论点赞接口
 func (ctrl *CommentController) Like(c *gin.Context) {
 	id, ok := parseUintParam(c, "id")
 	if !ok {
@@ -129,7 +129,7 @@ func (ctrl *CommentController) Like(c *gin.Context) {
 	response.Success(c, nil)
 }
 
-// Unlike DELETE /api/comments/:id/like
+// Unlike 取消评论点赞接口
 func (ctrl *CommentController) Unlike(c *gin.Context) {
 	id, ok := parseUintParam(c, "id")
 	if !ok {

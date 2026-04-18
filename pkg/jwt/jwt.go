@@ -14,12 +14,13 @@ var (
 )
 
 // GenerateToken 生成 JWT Token
-func GenerateToken(userID uint, username string) (string, error) {
+func GenerateToken(userID uint, username string, role int) (string, error) {
 	cfg := config.Get().JWT
 
 	claims := CustomClaims{
 		UserID:   userID,
 		Username: username,
+		Role:     role,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(cfg.ExpireHours * time.Hour)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
@@ -61,5 +62,5 @@ func RefreshToken(tokenString string) (string, error) {
 		return "", err
 	}
 
-	return GenerateToken(claims.UserID, claims.Username)
+	return GenerateToken(claims.UserID, claims.Username, claims.Role)
 }

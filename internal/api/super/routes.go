@@ -9,7 +9,7 @@ import (
 // RegisterRoutes 注册管理模块路由
 func (ctrl *ReviewController) RegisterRoutes(r *gin.RouterGroup) {
 	g := r.Group("/super")
-	g.Use(middleware.Auth())
+	g.Use(middleware.Auth(), middleware.RequireRole(0))
 	{
 		// 获取审核文章列表
 		g.GET("/articles", ctrl.List)

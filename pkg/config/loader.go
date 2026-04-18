@@ -63,7 +63,7 @@ func Get() *Config {
 	return globalConfig
 }
 
-// MustLoad 加载配置，失败时 panic
+// MustLoad 加载配置，失败时直接触发 panic
 func MustLoad(configPath string) *Config {
 	config, err := Load(configPath)
 	if err != nil {

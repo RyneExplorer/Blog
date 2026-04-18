@@ -148,7 +148,7 @@ func (a *App) initDependencies() {
 	articleSvc := service.NewArticleService(articleRepo, likeRepo, favoriteRepo)
 	commentSvc := service.NewCommentService(commentRepo, articleRepo, likeRepo)
 	categorySvc := service.NewCategoryService(categoryRepo)
-	reviewSvc := service.NewReviewService(reviewRepo, userRepo, articleRepo)
+	reviewSvc := service.NewReviewService(reviewRepo, articleRepo)
 
 	// 创建 Router
 	a.router = api.NewRouter(userSvc, authSvc, articleSvc, commentSvc, categorySvc, reviewSvc)

@@ -29,7 +29,7 @@ var allowedImageTypes = map[string]string{
 	"image/webp": ".webp",
 }
 
-// Result describes a successfully saved upload.
+// Result 表示一次上传成功后的结果
 type Result struct {
 	URL      string `json:"url"`
 	Path     string `json:"path"`
@@ -37,12 +37,12 @@ type Result struct {
 	Size     int64  `json:"size"`
 }
 
-// EnsureBaseDir makes sure the upload root exists before serving or saving files.
+// EnsureBaseDir 确保上传根目录存在，避免静态资源访问或保存文件时失败
 func EnsureBaseDir() error {
 	return os.MkdirAll(baseDir, permDir)
 }
 
-// SaveImage validates and stores an uploaded image, then returns its public URL.
+// SaveImage 校验并保存上传图片，返回可对外访问的地址
 func SaveImage(c *gin.Context, field, category string) (*Result, error) {
 	if err := EnsureBaseDir(); err != nil {
 		return nil, fmt.Errorf("创建上传目录失败: %w", err)
@@ -132,7 +132,7 @@ func detectContentType(fileHeader *multipart.FileHeader) (string, error) {
 	buffer := make([]byte, 512)
 	n, err := file.Read(buffer)
 	if err != nil && !errors.Is(err, multipart.ErrMessageTooLarge) && !errors.Is(err, os.ErrClosed) && !errors.Is(err, http.ErrMissingFile) {
-		// Ignore EOF-style short reads; only fail on actual I/O issues.
+		// 这里允许类似 EOF 的短读场景，只在真正的 I/O 异常时返回错误。
 		if !errors.Is(err, os.ErrNotExist) && err.Error() != "EOF" {
 			return "", fmt.Errorf("检测文件类型失败: %w", err)
 		}
