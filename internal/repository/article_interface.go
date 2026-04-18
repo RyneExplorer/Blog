@@ -30,7 +30,7 @@ type ArticleRepository interface {
 	CountFavorites(ctx context.Context, userID uint, categoryID *uint) (int64, error)
 }
 
-// ArticleListJoinRow 列表 JOIN 扫描行
+// ArticleListJoinRow 列表连表查询结果
 type ArticleListJoinRow struct {
 	ID             uint           `gorm:"column:id"`
 	Title          string         `gorm:"column:title"`
@@ -53,7 +53,7 @@ type ArticleListJoinRow struct {
 	CategorySlug   string         `gorm:"column:category_slug"`
 }
 
-// ArticleDetailJoinRow 详情 JOIN 扫描行
+// ArticleDetailJoinRow 详情连表查询结果
 type ArticleDetailJoinRow struct {
 	ID            uint      `gorm:"column:id"`
 	Title         string    `gorm:"column:title"`
@@ -72,7 +72,7 @@ type ArticleDetailJoinRow struct {
 	Avatar        string    `gorm:"column:avatar"`
 }
 
-// MyArticleListJoinRow “我的文章列表”JOIN 扫描行（返回文章 + 一个分类）
+// MyArticleListJoinRow “我的文章列表”连表查询结果（返回文章 + 一个分类）
 type MyArticleListJoinRow struct {
 	ID            uint           `gorm:"column:id"`
 	Title         string         `gorm:"column:title"`

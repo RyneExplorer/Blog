@@ -17,7 +17,7 @@ func NewCategoryController(categoryService service.CategoryService) *CategoryCon
 	return &CategoryController{categoryService: categoryService}
 }
 
-// List GET /api/categories
+// List 获取分类列表接口
 func (ctrl *CategoryController) List(c *gin.Context) {
 	data, err := ctrl.categoryService.ListAll(c.Request.Context())
 	if err != nil {

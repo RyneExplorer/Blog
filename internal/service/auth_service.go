@@ -1,6 +1,12 @@
 package service
 
 import (
+	"context"
+	"errors"
+	"fmt"
+	"math/rand"
+	"time"
+
 	"blog/internal/model/dto/request"
 	dto "blog/internal/model/dto/response"
 	"blog/internal/model/entity"
@@ -10,34 +16,22 @@ import (
 	bizerrors "blog/pkg/errors"
 	"blog/pkg/jwt"
 	"blog/pkg/logger"
-	"context"
-	"errors"
-	"fmt"
+
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 	"golang.org/x/crypto/bcrypt"
-	"math/rand"
-	"time"
 )
 
 // AuthService 认证服务接口
 type AuthService interface {
-	// Login 用户登录
 	Login(req *request.LoginRequest) (*dto.LoginResponse, error)
-	// RefreshToken 刷新 Token
 	RefreshToken(token string) (string, error)
-	// SendEmailCode 发送邮箱验证
 	SendEmailCode(email string) error
-	// Register 用户注册
 	Register(r *request.RegisterRequest) error
-	// Logout 用户登出
 	Logout(id uint) error
-
-	// ResetPassword 重置密码（邮箱验证码）
 	ResetPassword(req *request.ResetPasswordRequest) error
 }
 
-// authService 认证服务实现
 type authService struct {
 	userRepo    repository.UserRepository
 	userService UserService
@@ -45,7 +39,6 @@ type authService struct {
 }
 
 func (s *authService) Logout(id uint) error {
-	// 当前项目未实现 token 黑名单/撤销机制，因此这里默认无操作成功返回。
 	_ = id
 	return nil
 }
@@ -53,6 +46,8 @@ func (s *authService) Logout(id uint) error {
 func (s *authService) ResetPassword(req *request.ResetPasswordRequest) error {
 	ctx := context.Background()
 	codeKey := fmt.Sprintf("email_code:%s", req.Email)
+
+	// 1. 从 Redis 读取邮箱验证码，并校验用户提交的验证码是否一致。
 	cacheCode, err := s.redis.Get(ctx, codeKey).Result()
 	if err != nil {
 		if errors.Is(err, redis.Nil) {
@@ -60,14 +55,14 @@ func (s *authService) ResetPassword(req *request.ResetPasswordRequest) error {
 		}
 		return bizerrors.NewWithErr(bizerrors.CodeInternalError, "获取验证码缓存失败", err)
 	}
-
 	if req.EmailCaptcha != cacheCode {
 		return bizerrors.New(bizerrors.CodeInvalidParam, "验证码输入错误，请重新核对")
 	}
 
-	// 校验通过后，删除验证码，避免重复使用
+	// 2. 验证通过后立即消费验证码，避免同一验证码被重复使用。
 	_ = s.redis.Del(ctx, codeKey).Err()
 
+	// 3. 确认邮箱对应用户存在后，对新密码加密并执行更新。
 	user, err := s.userRepo.FindByEmail(req.Email)
 	if err != nil {
 		return err
@@ -80,6 +75,7 @@ func (s *authService) ResetPassword(req *request.ResetPasswordRequest) error {
 	if err != nil {
 		return err
 	}
+
 	return s.userRepo.Update(user.ID, map[string]interface{}{
 		"password": string(hashedPassword),
 	})
@@ -99,39 +95,36 @@ func NewAuthService(
 }
 
 func (s *authService) Login(req *request.LoginRequest) (*dto.LoginResponse, error) {
-	// 1. 校验验证码
+	// 1. 先校验图形验证码，避免在无效请求上继续消耗数据库与加密计算资源。
 	if !captcha.Verify(req.CaptchaID, req.Captcha) {
 		return nil, bizerrors.ErrInvalidCaptcha
 	}
-	// 2. 校验用户
+
+	// 2. 再查询用户并校验账号状态，确保只有正常状态的用户可以继续登录。
 	user, err := s.userRepo.FindByUsername(req.Username)
 	if err != nil {
 		logger.Errorf("查找用户名失败: username=%s, err=%v", req.Username, err)
-		return nil, bizerrors.NewWithErr(bizerrors.CodeInternalError, "查找用户名失败:", err)
+		return nil, bizerrors.NewWithErr(bizerrors.CodeInternalError, "查找用户名失败", err)
 	}
 	if user == nil {
 		return nil, bizerrors.ErrInvalidCredentials
 	}
-
-	// 3.检查用户状态 (1正常 2禁用)
 	if user.Status != 1 {
 		return nil, bizerrors.ErrUserDisabled
 	}
 
-	// 4.验证密码
+	// 3. 最后校验密码、签发 JWT，并组装登录响应返回给调用方。
 	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(req.Password)); err != nil {
-		logger.Errorf("密码验证失败: username=%s, err=%v", req.Username, err)
+		logger.Errorf("密码校验失败: username=%s, err=%v", req.Username, err)
 		return nil, bizerrors.NewWithErr(bizerrors.CodeInvalidCredentials, "登录失败：密码错误", err)
 	}
 
-	// 5.生成 JWT
-	token, err := jwt.GenerateToken(user.ID, user.Username)
+	token, err := jwt.GenerateToken(user.ID, user.Username, user.Role)
 	if err != nil {
-		logger.Error("JWT令牌生成失败:", zap.Error(err))
+		logger.Error("JWT 令牌生成失败", zap.Error(err))
 		return nil, bizerrors.NewWithErr(bizerrors.CodeInvalidToken, "无效的令牌", err)
 	}
 
-	// 构建响应
 	userResp := s.userService.GetUserResponse(user)
 	return &dto.LoginResponse{
 		Token: token,
@@ -140,7 +133,7 @@ func (s *authService) Login(req *request.LoginRequest) (*dto.LoginResponse, erro
 }
 
 func (s *authService) Register(req *request.RegisterRequest) error {
-	// 检查用户名是否存在
+	// 1. 先校验用户名和邮箱是否已被占用，尽量在创建前就拦住冲突请求。
 	exists, err := s.userRepo.ExistsByUsername(req.Username)
 	if err != nil {
 		return err
@@ -149,7 +142,6 @@ func (s *authService) Register(req *request.RegisterRequest) error {
 		return bizerrors.ErrUserAlreadyExists
 	}
 
-	// 检查邮箱是否存在
 	exists, err = s.userRepo.ExistsByEmail(req.Email)
 	if err != nil {
 		return err
@@ -158,7 +150,7 @@ func (s *authService) Register(req *request.RegisterRequest) error {
 		return bizerrors.New(bizerrors.CodeUserAlreadyExists, "邮箱已被注册")
 	}
 
-	// 验证邮箱验证码
+	// 2. 再校验并消费邮箱验证码，确保注册动作与邮箱验证强绑定。
 	ctx := context.Background()
 	codeKey := fmt.Sprintf("email_code:%s", req.Email)
 	cacheCode, err := s.redis.Get(ctx, codeKey).Result()
@@ -168,7 +160,6 @@ func (s *authService) Register(req *request.RegisterRequest) error {
 		}
 		return bizerrors.NewWithErr(bizerrors.CodeInternalError, "获取验证码缓存失败", err)
 	}
-
 	if req.EmailCaptcha != cacheCode {
 		return bizerrors.New(bizerrors.CodeInvalidParam, "验证码输入错误，请重新核对")
 	}
@@ -176,18 +167,18 @@ func (s *authService) Register(req *request.RegisterRequest) error {
 		logger.Info("删除验证码失败")
 	}
 
+	// 3. 最后加密密码并创建用户，避免明文密码落库。
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 	if err != nil {
 		return err
 	}
 
-	// 创建用户
 	user := &entity.User{
 		Username: req.Username,
 		Password: string(hashedPassword),
 		Email:    req.Email,
-		Status:   1, // 默认状态正常
-		Role:     1, // 默认普通用户
+		Status:   1,
+		Role:     1,
 	}
 	return s.userRepo.Create(user)
 }
@@ -199,12 +190,13 @@ func (s *authService) RefreshToken(token string) (string, error) {
 	}
 	return newToken, nil
 }
+
 func (s *authService) SendEmailCode(emailStr string) error {
-	// 1. 生成6位随机数字
+	// 1. 生成一次性邮箱验证码。
 	rnd := rand.New(rand.NewSource(time.Now().UnixNano()))
 	code := fmt.Sprintf("%06d", rnd.Intn(1000000))
 
-	// 2. 存储到 Redis (有效期5分钟)
+	// 2. 将验证码写入 Redis，并设置有效期控制时效。
 	ctx := context.Background()
 	key := fmt.Sprintf("email_code:%s", emailStr)
 	err := s.redis.Set(ctx, key, code, 5*time.Minute)
@@ -212,9 +204,9 @@ func (s *authService) SendEmailCode(emailStr string) error {
 		return bizerrors.NewWithErr(bizerrors.CodeInternalError, "缓存验证码失败", err.Err())
 	}
 
-	// 3. 发送邮件
+	// 3. 调用邮件组件把验证码发送给目标邮箱。
 	subject := "Ryne 博客验证码"
-	body := fmt.Sprintf("<h1>您的验证码是: %s</h1><p>有效期5分钟，请勿泄露给他人。</p>", code)
+	body := fmt.Sprintf("<h1>您的验证码是: %s</h1><p>有效期 5 分钟，请勿泄露给他人。</p>", code)
 	if err := email.SendEmail(emailStr, subject, body); err != nil {
 		return bizerrors.NewWithErr(bizerrors.CodeInternalError, "发送邮件失败", err)
 	}

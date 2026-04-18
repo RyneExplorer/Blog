@@ -8,7 +8,7 @@ import (
 	"blog/internal/model/entity"
 )
 
-// CommentJoinRow 评论列表 JOIN 扫描行
+// CommentJoinRow 评论列表连表查询结果
 type CommentJoinRow struct {
 	ID           uint          `gorm:"column:id"`
 	ParentID     sql.NullInt64 `gorm:"column:parent_id"`

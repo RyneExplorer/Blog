@@ -9,7 +9,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// Recovery Panic 恢复中间件
+// Recovery panic 恢复中间件
 func Recovery() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		defer func() {
@@ -36,7 +36,7 @@ func Recovery() gin.HandlerFunc {
 	}
 }
 
-// RecoveryWithLogger 自定义日志的 Panic 恢复中间件
+// RecoveryWithLogger 自定义日志的 panic 恢复中间件
 func RecoveryWithLogger(customLogger any) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		defer func() {

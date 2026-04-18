@@ -12,13 +12,13 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// ArticleController handles article endpoints.
+// ArticleController 处理文章相关接口
 type ArticleController struct {
 	articleService service.ArticleService
 	commentService service.CommentService
 }
 
-// NewArticleController creates an article controller.
+// NewArticleController 创建文章控制器
 func NewArticleController(articleService service.ArticleService, commentService service.CommentService) *ArticleController {
 	return &ArticleController{
 		articleService: articleService,
