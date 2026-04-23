@@ -16,7 +16,6 @@ type ArticleRepository interface {
 	IncrementViewInTx(ctx context.Context, id uint) error
 	ExistsPublished(ctx context.Context, id uint) (bool, error)
 
-	// 用户文章模块
 	ListByUserWithJoin(ctx context.Context, userID uint, offset, limit int, categoryID *uint, sort string) ([]MyArticleListJoinRow, error)
 	CountByUser(ctx context.Context, userID uint, categoryID *uint) (int64, error)
 	GetByIDWithCategories(ctx context.Context, id uint) (*entity.Article, error)
@@ -25,7 +24,6 @@ type ArticleRepository interface {
 	UpdateStatusByAuthor(ctx context.Context, id uint, userID uint, status int) (bool, error)
 	DeleteByAuthorInTx(ctx context.Context, id uint, userID uint) (bool, error)
 
-	// 用户收藏模块
 	ListFavoritesWithJoin(ctx context.Context, userID uint, offset, limit int, categoryID *uint, sort string) ([]MyArticleListJoinRow, error)
 	CountFavorites(ctx context.Context, userID uint, categoryID *uint) (int64, error)
 }
@@ -72,7 +70,7 @@ type ArticleDetailJoinRow struct {
 	Avatar        string    `gorm:"column:avatar"`
 }
 
-// MyArticleListJoinRow “我的文章列表”连表查询结果（返回文章 + 一个分类）
+// MyArticleListJoinRow “我的文章/收藏”列表查询结果
 type MyArticleListJoinRow struct {
 	ID            uint           `gorm:"column:id"`
 	Title         string         `gorm:"column:title"`

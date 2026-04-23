@@ -136,13 +136,22 @@ func (s *articleService) GetArticleDetail(ctx context.Context, id uint, viewerUs
 	}
 
 	cids := make([]uint, 0, len(a.Categories))
+	categoryName := ""
 	for _, c := range a.Categories {
 		cids = append(cids, c.ID)
+		if categoryName == "" {
+			categoryName = c.Name
+		}
 	}
 
 	summary := strings.TrimSpace(a.Summary)
 	if summary == "" {
 		summary = utils.TruncateRunes(a.Content, 100)
+	}
+
+	authorName := strings.TrimSpace(a.User.Nickname)
+	if authorName == "" {
+		authorName = strings.TrimSpace(a.User.Username)
 	}
 
 	// 3. 最后补齐摘要、分类 ID 等衍生字段并返回详情响应。
@@ -152,6 +161,11 @@ func (s *articleService) GetArticleDetail(ctx context.Context, id uint, viewerUs
 		Summary:       summary,
 		Content:       a.Content,
 		CoverImage:    a.CoverImage,
+		CategoryName:  categoryName,
+		Username:      a.User.Username,
+		Nickname:      authorName,
+		Bio:           a.User.Bio,
+		Avatar:        a.User.Avatar,
 		Status:        a.Status,
 		ViewCount:     a.ViewCount,
 		LikeCount:     int(a.LikeCount),

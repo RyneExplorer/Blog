@@ -1,239 +1,128 @@
-# 架构设计文档
-
-## 概述
-
-blog 采用标准的 MVC 三层架构设计，实现了清晰的分层结构和依赖注入。
-
-## 架构分层
-
-```
-┌─────────────────────────────────────────┐
-│          API Layer (Controller)          │  HTTP 请求处理
-├─────────────────────────────────────────┤
-│         Service Layer (Business)         │  业务逻辑处理
-├─────────────────────────────────────────┤
-│      Repository Layer (Data Access)      │  数据访问
-├─────────────────────────────────────────┤
-│         Database (MySQL + Redis)         │  数据存储
-└─────────────────────────────────────────┘
-```
-
-## 层次说明
-
-### 1. API 层 (Controller)
-
-**位置**: `internal/api/`
-
-**职责**:
-- 处理 HTTP 请求和响应
-- 参数绑定和验证
-- 调用 Service 层处理业务
-- 返回统一格式的响应
+# 架构设计
 
-**示例**:
-```go
-func (ctrl *Controller) GetProfile(c *gin.Context) {
-    userID := middleware.GetUserID(c)
-    user, err := ctrl.userService.GetUserByID(userID)
-    // ...
-}
-```
+## 概览
 
-### 2. Service 层
+`blog` 是一个基于 Go 的博客后端，采用清晰的三层结构：
 
-**位置**: `internal/service/`
+`Controller -> Service -> Repository`
 
-**职责**:
-- 实现核心业务逻辑
-- 事务管理
-- 调用 Repository 层进行数据操作
-- 业务规则验证
+项目入口位于 `cmd/server/main.go`，真正的启动与装配逻辑集中在 `internal/app/app.go`。
 
-**示例**:
-```go
-func (s *userService) Register(req *request.RegisterRequest) error {
-    // 业务验证
-    exists, _ := s.userRepo.ExistsByUsername(req.Username)
-    if exists {
-        return errors.ErrUserAlreadyExists
-    }
-    // 业务处理
-    // ...
-}
-```
+## 分层职责
 
-### 3. Repository 层
+### API 层
 
-**位置**: `internal/repository/`
+目录：`internal/api/`
 
-**职责**:
-- 封装数据访问逻辑
-- CRUD 操作
-- 数据查询和转换
+职责：
 
-**示例**:
-```go
-func (r *userRepository) FindByID(id uint) (*entity.User, error) {
-    var user entity.User
-    err := r.db.First(&user, id).Error
-    // ...
-}
-```
+- 处理 HTTP 请求与参数绑定
+- 调用 service 执行业务逻辑
+- 返回统一响应结构
 
-## 设计模式
+这一层不直接访问数据库，也不承载复杂业务规则。
 
-### 依赖注入
+### Service 层
 
-所有层之间通过构造函数注入依赖，便于测试和扩展。
+目录：`internal/service/`
 
-```go
-// Controller 注入 Service
-func NewController(userService service.UserService) *Controller {
-    return &Controller{userService: userService}
-}
+职责：
 
-// Service 注入 Repository
-func NewUserService(userRepo repository.UserRepository) UserService {
-    return &userService{userRepo: userRepo}
-}
-```
+- 编排核心业务逻辑
+- 做权限判断与状态流转
+- 组合多个 repository 的操作
+- 构建返回给控制器的结果
 
-### 接口隔离
+例如文章发布、评论回复、管理员审核，都应在 service 层完成。
 
-Service 和 Repository 层使用接口定义，支持 Mock 测试和多种实现。
+### Repository 层
 
-```go
-// 定义接口
-type UserRepository interface {
-    FindByID(id uint) (*entity.User, error)
-    Create(user *entity.User) error
-}
+目录：`internal/repository/`
 
-// 实现接口
-type userRepository struct {
-    db *gorm.DB
-}
-```
+职责：
 
-## 核心组件
+- 封装 GORM 查询
+- 执行事务和关联更新
+- 处理 MySQL 持久化细节
 
-### 1. 配置管理
+这一层只关心数据访问，不做业务语义判断。
 
-**位置**: `pkg/config/`
+## 核心目录
 
-- 使用 Viper 加载 YAML 配置
-- 支持环境变量覆盖
-- 支持多环境配置（dev/prod）
+- `internal/app`：应用初始化、依赖注入、HTTP 服务启动与优雅关闭
+- `internal/model/entity`：数据库实体
+- `internal/model/dto/request`：请求 DTO
+- `internal/model/dto/response`：响应 DTO
+- `internal/middleware`：日志、恢复、CORS、JWT 鉴权
+- `pkg/config`：配置加载
+- `pkg/database`：MySQL / Redis 初始化与关闭
+- `pkg/logger`：日志封装
+- `pkg/jwt`：JWT 工具
+- `pkg/response`：统一响应格式
+- `pkg/errors`：业务错误码与错误对象
 
-### 2. 日志系统
+## 启动流程
 
-**位置**: `pkg/logger/`
+`internal/app/app.go` 的初始化顺序为：
 
-- 使用 Zap 结构化日志
-- 集成 Lumberjack 实现日志轮转
-- 支持控制台和文件输出
+1. `initConfig()`
+2. `initLogger()`
+3. `initDatabase()`
+4. `initDependencies()`
+5. `initRouter()`
+6. `initServer()`
 
-### 3. 数据库管理
+其中：
 
-**位置**: `pkg/database/`
+- `initDatabase()` 会初始化 MySQL，并执行 `AutoMigrate(...)`
+- Redis 初始化失败不会阻止服务启动，但会影响验证码、注册、找回密码等功能
 
-- MySQL 连接池配置
-- GORM 配置和初始化
-- Redis 连接管理
+## 路由结构
 
-### 4. 认证系统
+路由注册集中在 `internal/api/router.go`：
 
-**位置**: `pkg/jwt/`, `internal/middleware/auth.go`
+- 健康检查：`GET /api/health`
+- 认证模块：`/api/auth`
+- 用户模块：`/api/user`
+- 文章模块：`/api/articles`
+- 评论模块：`/api/comments`
+- 分类模块：`/api/categories`
+- 管理审核模块：`/api/super`
 
-- JWT Token 生成和验证
-- 认证中间件
-- 从 Token 提取用户信息
+## 权限模型
 
-### 5. 错误处理
+鉴权使用 JWT，Token 从 `Authorization: Bearer <token>` 读取。
 
-**位置**: `pkg/errors/`
+当前角色约定：
 
-- 自定义错误类型
-- 统一错误码管理
-- 业务错误和系统错误分离
+- `role = 0`：管理员
+- `role = 1`：普通用户
 
-### 6. 中间件系统
+需要注意的是，部分接口的“是否管理员”判断不在路由层，而在 service 层完成。
 
-**位置**: `internal/middleware/`
+## 数据与状态约定
 
-- **Logger**: 记录请求日志
-- **Recovery**: Panic 恢复
-- **CORS**: 跨域处理
-- **Auth**: JWT 认证
+文章状态在现有实现中包括：
 
-## 数据模型
+- `0`：草稿
+- `1`：待审核
+- `2`：已发布
+- `3`：已拒绝
+- `4`：已封禁
 
-### Entity (实体)
+统一响应格式定义在 `pkg/response/response.go`，业务错误通常仍返回 HTTP `200`，调用方必须结合 JSON 中的 `code` 和 `msg` 判断结果。
 
-**位置**: `internal/model/entity/`
+## 扩展建议
 
-对应数据库表结构，使用 GORM 标签配置：
+新增一个完整业务模块时，建议按以下顺序扩展：
 
-```go
-type User struct {
-    BaseEntity
-    Username string `gorm:"type:varchar(50);uniqueIndex"`
-    Password string `gorm:"type:varchar(255)"`
-    // ...
-}
-```
+1. 在 `entity` 中新增实体
+2. 在 `dto/request` 与 `dto/response` 中新增结构
+3. 在 `repository` 中新增接口与实现
+4. 在 `service` 中新增接口与实现
+5. 在 `api/<module>` 中新增 controller 与 routes
+6. 在 `app.go` 的 `initDependencies()` 中注入依赖
+7. 在 `router.go` 中注册路由
+8. 必要时加入 `AutoMigrate(...)`
 
-### DTO (数据传输对象)
-
-**位置**: `internal/model/dto/`
-
-- **Request**: API 请求数据结构
-- **Response**: API 响应数据结构
-
-## 请求流程
-
-```
-HTTP Request
-    ↓
-[Middleware] → Recovery, Logger, CORS, Auth
-    ↓
-[Controller] → 参数绑定和验证
-    ↓
-[Service] → 业务逻辑处理
-    ↓
-[Repository] → 数据库操作
-    ↓
-Database
-    ↓
-[Response] → 统一响应格式
-    ↓
-HTTP Response
-```
-
-## 数据库设计
-
-### 表结构
-
-- **users**: 用户表
-  - 基础字段：id, created_at, updated_at, deleted_at
-  - 业务字段：username, password, email, nickname, avatar, status
-
-### 索引设计
-
-- 唯一索引：username, email
-- 普通索引：deleted_at
-
-## 安全设计
-
-1. **密码加密**: 使用 bcrypt 加密存储
-2. **JWT 认证**: Token 有效期控制
-3. **CORS 配置**: 限制跨域访问
-4. **参数验证**: 使用 validator 标签
-5. **SQL 注入防护**: 使用 GORM 参数化查询
-
-## 性能优化
-
-1. **连接池**: MySQL 和 Redis 连接池配置
-2. **日志轮转**: 避免日志文件过大
-3. **优雅关闭**: 等待现有请求完成
-4. **跳过默认事务**: GORM 配置提升性能
+最容易漏改的地方通常是 `initDependencies()`、`router.go` 和数据库迁移注册。

@@ -2,237 +2,194 @@
 
 ## 基础信息
 
-- **Base URL**: `http://localhost:8080`
-- **API 版本**: v1
-- **Content-Type**: `application/json`
+- Base URL：`http://localhost:8080`
+- Content-Type：`application/json`
+- 鉴权方式：`Authorization: Bearer <token>`
+
+健康检查接口：
+
+```http
+GET /api/health
+```
 
 ## 统一响应格式
 
-所有 API 返回统一的响应格式：
+项目中的接口统一返回类似结构：
 
 ```json
 {
   "code": 0,
-  "message": "success",
+  "msg": "成功",
   "data": {}
 }
 ```
 
-- `code`: 状态码，0 表示成功
-- `message`: 响应消息
-- `data`: 响应数据
+说明：
 
-## 错误码
+- `code = 0` 表示业务成功
+- `msg` 为响应消息
+- `data` 为返回数据
 
-| 错误码 | 说明 |
-|--------|------|
+注意：很多业务错误仍返回 HTTP `200`，客户端必须同时判断 `code`。
+
+## 常见错误码
+
+| code | 说明 |
+| --- | --- |
 | 0 | 成功 |
 | 400 | 请求参数错误 |
 | 401 | 未授权 |
 | 403 | 禁止访问 |
 | 404 | 资源不存在 |
-| 500 | 服务器内部错误 |
+| 409 | 资源冲突 |
 | 1001 | 用户不存在 |
 | 1002 | 用户已存在 |
 | 1003 | 用户名或密码错误 |
-| 1004 | 用户已被禁用 |
-| 1005 | 无效的令牌 |
-| 1006 | 令牌已过期 |
+| 1004 | 用户被禁用 |
+| 1005 | 无效 token |
+| 1006 | token 过期 |
+| 1007 | 验证码无效 |
 
-## 认证方式
+## 认证模块
 
-使用 JWT Bearer Token 认证：
+路由前缀：`/api/auth`
 
-```
-Authorization: Bearer {token}
-```
-
-## API 接口
-
-### 健康检查
-
-#### 检查服务状态
+### 注册
 
 ```http
-GET /api/v1/health
+POST /api/auth/register
 ```
 
-**响应示例**:
-```json
-{
-  "status": "ok",
-  "message": "Blog API is running"
-}
-```
+请求体：
 
----
-
-### 用户认证
-
-#### 用户注册
-
-```http
-POST /api/v1/auth/register
-```
-
-**请求参数**:
 ```json
 {
   "username": "testuser",
   "password": "123456",
+  "confirm_password": "123456",
   "email": "test@example.com",
-  "nickname": "测试用户"
+  "captcha": "123456"
 }
 ```
 
-| 参数 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| username | string | 是 | 用户名（3-50字符） |
-| password | string | 是 | 密码（6-50字符） |
-| email | string | 是 | 邮箱地址 |
-| nickname | string | 否 | 昵称（最多50字符） |
-
-**响应示例**:
-```json
-{
-  "code": 0,
-  "message": "成功",
-  "data": null
-}
-```
-
-#### 用户登录
+### 登录
 
 ```http
-POST /api/v1/auth/login
+POST /api/auth/login
 ```
 
-**请求参数**:
+请求体：
+
 ```json
 {
   "username": "testuser",
-  "password": "123456"
+  "password": "123456",
+  "captcha_id": "captcha-id",
+  "captcha": "abcd"
 }
 ```
 
-| 参数 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| username | string | 是 | 用户名 |
-| password | string | 是 | 密码 |
-
-**响应示例**:
-```json
-{
-  "code": 0,
-  "message": "成功",
-  "data": {
-    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-    "user": {
-      "id": 1,
-      "username": "testuser",
-      "email": "test@example.com",
-      "nickname": "测试用户",
-      "avatar": "",
-      "status": 1,
-      "created_at": "2024-01-01T00:00:00Z",
-      "updated_at": "2024-01-01T00:00:00Z"
-    }
-  }
-}
-```
-
-#### 刷新 Token
+### 刷新 token
 
 ```http
-POST /api/v1/auth/refresh
+POST /api/auth/refresh
 ```
 
-**请求参数**:
+请求体：
+
 ```json
 {
-  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+  "token": "your-token"
 }
 ```
 
-**响应示例**:
-```json
-{
-  "code": 0,
-  "message": "成功",
-  "data": {
-    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
-  }
-}
-```
-
----
-
-### 用户管理
-
-以下接口需要认证，请在请求头中携带 Token。
-
-#### 获取当前用户信息
+### 发送邮箱验证码
 
 ```http
-GET /api/v1/user/profile
-Authorization: Bearer {token}
+POST /api/auth/email/code
 ```
 
-**响应示例**:
+请求体：
+
 ```json
 {
-  "code": 0,
-  "message": "成功",
-  "data": {
-    "id": 1,
-    "username": "testuser",
-    "email": "test@example.com",
-    "nickname": "测试用户",
-    "avatar": "",
-    "status": 1,
-    "created_at": "2024-01-01T00:00:00Z",
-    "updated_at": "2024-01-01T00:00:00Z"
-  }
+  "email": "test@example.com"
 }
 ```
 
-#### 更新用户信息
+### 重置密码
 
 ```http
-PUT /api/v1/user/profile
-Authorization: Bearer {token}
+POST /api/auth/password/reset
 ```
 
-**请求参数**:
+请求体：
+
 ```json
 {
-  "nickname": "新昵称",
-  "avatar": "https://example.com/avatar.jpg"
+  "email": "test@example.com",
+  "captcha": "123456",
+  "new_password": "newpass123",
+  "confirm_password": "newpass123"
 }
 ```
 
-| 参数 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| nickname | string | 否 | 昵称 |
-| avatar | string | 否 | 头像 URL |
-
-**响应示例**:
-```json
-{
-  "code": 0,
-  "message": "成功",
-  "data": null
-}
-```
-
-#### 修改密码
+### 获取图形验证码
 
 ```http
-POST /api/v1/user/password
-Authorization: Bearer {token}
+GET /api/auth/captcha
 ```
 
-**请求参数**:
+## 用户模块
+
+路由前缀：`/api/user`
+
+以下接口需要登录：
+
+- `GET /profile`
+- `PUT /profile`
+- `POST /avatar`
+- `POST /password`
+
+### 获取个人资料
+
+```http
+GET /api/user/profile
+```
+
+### 更新个人资料
+
+```http
+PUT /api/user/profile
+```
+
+请求体示例：
+
+```json
+{
+  "nickname": "新的昵称",
+  "avatar": "https://example.com/avatar.jpg",
+  "bio": "个人简介",
+  "email": "test@example.com"
+}
+```
+
+### 上传头像
+
+```http
+POST /api/user/avatar
+```
+
+该接口通常使用表单上传文件，返回上传后的资源地址。
+
+### 修改密码
+
+```http
+POST /api/user/password
+```
+
+请求体：
+
 ```json
 {
   "old_password": "123456",
@@ -240,177 +197,175 @@ Authorization: Bearer {token}
 }
 ```
 
-| 参数 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| old_password | string | 是 | 旧密码 |
-| new_password | string | 是 | 新密码（6-50字符） |
+## 文章模块
 
-**响应示例**:
-```json
-{
-  "code": 0,
-  "message": "成功",
-  "data": null
-}
-```
+路由前缀：`/api/articles`
 
-#### 获取用户列表（分页）
+### 公开接口
+
+- `GET /api/articles`
+- `GET /api/articles/:id`
+- `GET /api/articles/:id/comments`
+- `POST /api/articles/:id/view`
+
+### 登录后接口
+
+- `POST /api/articles`
+- `POST /api/articles/cover_image`
+- `GET /api/articles/favorites`
+- `GET /api/articles/mine`
+- `GET /api/articles/mine/:id`
+- `PUT /api/articles/:id`
+- `POST /api/articles/:id/publish`
+- `DELETE /api/articles/:id`
+- `POST /api/articles/:id/like`
+- `POST /api/articles/:id/unlike`
+- `POST /api/articles/:id/favorite`
+- `POST /api/articles/:id/unfavorite`
+
+### 列表查询参数
+
+适用于 `GET /api/articles` 与 `GET /api/articles/mine`：
+
+- `page`：页码，从 1 开始
+- `pageSize`：每页条数
+- `category_id`：可选分类
+- `sort`：`latest` 或 `hottest`
+
+### 创建文章
 
 ```http
-GET /api/v1/user/list?page=1&size=10
-Authorization: Bearer {token}
+POST /api/articles
 ```
 
-**查询参数**:
+请求体：
 
-| 参数 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| page | int | 是 | 页码，从 1 开始 |
-| size | int | 是 | 每页大小，1-100 |
-
-**响应示例**:
 ```json
 {
-  "code": 0,
-  "message": "成功",
-  "data": {
-    "list": [
-      {
-        "id": 1,
-        "username": "testuser",
-        "email": "test@example.com",
-        "nickname": "测试用户",
-        "avatar": "",
-        "status": 1,
-        "created_at": "2024-01-01T00:00:00Z",
-        "updated_at": "2024-01-01T00:00:00Z"
-      }
-    ],
-    "total": 100,
-    "page": 1,
-    "size": 10,
-    "total_page": 10
-  }
+  "title": "文章标题",
+  "content": "文章内容",
+  "summary": "摘要",
+  "cover_image": "/uploads/example.jpg",
+  "category_ids": [1, 2]
 }
 ```
 
-**响应字段说明**:
+### 更新文章
 
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| list | array | 用户数据列表 |
-| total | int64 | 总记录数 |
-| page | int | 当前页码 |
-| size | int | 每页大小 |
-| total_page | int | 总页数 |
+```http
+PUT /api/articles/:id
+```
 
----
+请求体与创建文章一致。
+
+## 评论模块
+
+路由前缀：`/api/comments`
+
+以下接口都需要登录：
+
+- `POST /api/comments`
+- `POST /api/comments/replies`
+- `POST /api/comments/:id/like`
+- `POST /api/comments/:id/unlike`
+- `DELETE /api/comments/:id`
+
+### 发表评论
+
+```http
+POST /api/comments
+```
+
+请求体：
+
+```json
+{
+  "article_id": 1,
+  "content": "这是一条评论"
+}
+```
+
+### 回复评论
+
+```http
+POST /api/comments/replies
+```
+
+请求体：
+
+```json
+{
+  "article_id": 1,
+  "content": "这是一条回复",
+  "parent_id": 10,
+  "root_id": 10
+}
+```
+
+## 分类模块
+
+```http
+GET /api/categories
+```
+
+当前为公开只读接口。
+
+## 管理审核模块
+
+路由前缀：`/api/super`
+
+这些接口需要登录，且业务层会校验管理员权限：
+
+- `GET /api/super/articles`
+- `GET /api/super/articles/:id`
+- `GET /api/super/userlist`
+- `POST /api/super/articles/:id/approve`
+- `POST /api/super/articles/:id/reject`
+- `POST /api/super/articles/:id/ban`
+- `PUT /api/super/articles/:id/category`
+
+### 审核列表参数
+
+- `page`
+- `pageSize`
+- `category_id`
+- `username`
+- `status`
+
+### 驳回请求体
+
+```json
+{
+  "reason": "内容不符合规范"
+}
+```
+
+### 更新文章分类请求体
+
+```json
+{
+  "category_ids": [1, 2]
+}
+```
 
 ## 使用示例
 
 ### cURL
 
 ```bash
-# 用户注册
-curl -X POST http://localhost:8080/api/v1/auth/register \
+curl -X POST http://localhost:8080/api/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"username":"test","password":"123456","email":"test@example.com"}'
+  -d "{\"username\":\"testuser\",\"password\":\"123456\",\"captcha_id\":\"id\",\"captcha\":\"abcd\"}"
+```
 
-# 用户登录
-curl -X POST http://localhost:8080/api/v1/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"username":"test","password":"123456"}'
-
-# 获取用户信息
-curl http://localhost:8080/api/v1/user/profile \
-  -H "Authorization: Bearer YOUR_TOKEN_HERE"
-
-# 获取用户列表（分页）
-curl "http://localhost:8080/api/v1/user/list?page=1&size=10" \
+```bash
+curl http://localhost:8080/api/user/profile \
   -H "Authorization: Bearer YOUR_TOKEN_HERE"
 ```
-
-### JavaScript (Fetch)
-
-```javascript
-// 用户登录
-const response = await fetch('http://localhost:8080/api/v1/auth/login', {
-  method: 'POST',
-  headers: {
-    'Content-Type': 'application/json',
-  },
-  body: JSON.stringify({
-    username: 'test',
-    password: '123456',
-  }),
-});
-
-const data = await response.json();
-const token = data.data.token;
-
-// 获取用户信息
-const profile = await fetch('http://localhost:8080/api/v1/user/profile', {
-  headers: {
-    'Authorization': `Bearer ${token}`,
-  },
-});
-
-const profileData = await profile.json();
-
-// 获取用户列表（分页）
-const users = await fetch('http://localhost:8080/api/v1/user/list?page=1&size=10', {
-  headers: {
-    'Authorization': `Bearer ${token}`,
-  },
-});
-
-const usersData = await users.json();
-console.log(usersData.data.list); // 用户列表
-console.log(usersData.data.total); // 总记录数
-console.log(usersData.data.total_page); // 总页数
-```
-
-### Python (requests)
-
-```python
-import requests
-
-# 用户登录
-response = requests.post('http://localhost:8080/api/v1/auth/login', json={
-    'username': 'test',
-    'password': '123456',
-})
-
-data = response.json()
-token = data['data']['token']
-
-# 获取用户信息
-profile = requests.get('http://localhost:8080/api/v1/user/profile', headers={
-    'Authorization': f'Bearer {token}',
-})
-
-profile_data = profile.json()
-
-# 获取用户列表（分页）
-users = requests.get('http://localhost:8080/api/v1/user/list', params={
-    'page': 1,
-    'size': 10
-}, headers={
-    'Authorization': f'Bearer {token}',
-})
-
-users_data = users.json()
-print(users_data['data']['list'])  # 用户列表
-print(users_data['data']['total'])  # 总记录数
-print(users_data['data']['total_page'])  # 总页数
-```
-
----
 
 ## 注意事项
 
-1. **Token 有效期**: Token 默认有效期为 24 小时
-2. **密码安全**: 密码使用 bcrypt 加密存储，服务端无法查看明文密码
-3. **请求频率**: 建议客户端实现请求频率限制
-4. **错误处理**: 请根据错误码进行相应的错误处理
-5. **时区**: 所有时间使用 UTC 时区，格式为 ISO 8601
+- Token 是否过期需要结合业务错误码判断
+- 注册与重置密码依赖 Redis 中的邮箱验证码
+- `POST /api/user/avatar` 与 `POST /api/articles/cover_image` 涉及上传目录权限
+- 文章详情接口当前是公开路由，但业务返回仍受文章状态影响

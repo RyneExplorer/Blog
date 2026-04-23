@@ -197,6 +197,7 @@ func (r *articleRepository) GetByIDWithCategories(ctx context.Context, id uint) 
 	var a entity.Article
 	err := r.db.WithContext(ctx).Model(&entity.Article{}).
 		Preload("Categories").
+		Preload("User").
 		Where("id = ?", id).
 		First(&a).Error
 	if err != nil {
