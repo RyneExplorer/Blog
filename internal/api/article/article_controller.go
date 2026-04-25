@@ -73,6 +73,26 @@ func (ctrl *ArticleController) UploadCover(c *gin.Context) {
 	})
 }
 
+// UploadContentImage 上传正文图片
+func (ctrl *ArticleController) UploadContentImage(c *gin.Context) {
+	userID := middleware.GetUserID(c)
+	if userID == 0 {
+		response.Unauthorized(c, "用户未登录")
+		return
+	}
+
+	result, err := upload.SaveImage(c, "file", "article-content")
+	if err != nil {
+		response.BadRequest(c, err.Error())
+		return
+	}
+
+	response.Success(c, gin.H{
+		"content_image": result.URL,
+		"url":           result.URL,
+	})
+}
+
 // Detail 获取首页文章详情
 func (ctrl *ArticleController) Detail(c *gin.Context) {
 	id, ok := parseUintParam(c, "id")
