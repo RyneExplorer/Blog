@@ -8,6 +8,7 @@
 bin/
 dist/
 configs/config.yaml
+configs/config.docker.yaml
 
 # Test binary, built with `go test -c`
 *.test

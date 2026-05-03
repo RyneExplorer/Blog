@@ -1,0 +1,25 @@
+# 1. 排除 Git 和 IDE 文件，减少镜像构建上下文。
+.git
+.gitignore
+.idea
+.vscode
+*.iml
+
+# 2. 排除本地缓存和构建产物。
+.gocache
+bin
+coverage.out
+coverage.html
+
+# 3. 排除运行期数据，改由 docker volume 持久化。
+logs
+uploads
+
+# 4. 排除本地环境文件，避免敏感配置进入镜像。
+.env
+.env.*
+configs/config.yaml
+
+# 5. 排除临时文件。
+*.tmp
+*.log
