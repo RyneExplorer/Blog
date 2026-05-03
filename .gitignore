@@ -4,6 +4,7 @@
 *.dll
 *.so
 *.dylib
+
 bin/
 dist/
 configs/config.yaml
@@ -43,3 +44,5 @@ Thumbs.db
 # Build artifacts
 /build/
 /tmp/
+/uploads/
+agents.md

@@ -16,6 +16,9 @@ func (ctrl *ArticleController) RegisterRoutes(r *gin.RouterGroup) {
 		// 上传文章封面
 		g.POST("/cover_image", middleware.Auth(), ctrl.UploadCover)
 
+		// 上传正文图片
+		g.POST("/content_image", middleware.Auth(), ctrl.UploadContentImage)
+
 		// 获取文章列表
 		g.GET("", ctrl.List)
 

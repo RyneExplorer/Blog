@@ -7,6 +7,11 @@ type ArticleDetailResponse struct {
 	Summary       string `json:"summary"`
 	Content       string `json:"content"`
 	CoverImage    string `json:"cover_image"`
+	CategoryName  string `json:"category_name"`
+	Username      string `json:"username"`
+	Nickname      string `json:"nickname"`
+	Bio           string `json:"bio"`
+	Avatar        string `json:"avatar"`
 	Status        int    `json:"status"`
 	ViewCount     int    `json:"view_count"`
 	LikeCount     int    `json:"like_count"`
