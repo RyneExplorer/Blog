@@ -77,16 +77,16 @@ func collectArticleIDsFromMyRows(rows []repository.MyArticleListJoinRow) []uint 
 }
 
 // loadArticleInteractionState 批量加载当前用户对文章的点赞和收藏状态
-// 1. viewerUserID 为 0 时代表匿名访问，直接返回空状态。
-// 2. 已登录时分别查询 likes 和 favorites 关系表，数据库状态作为前端红色 icon 的权威来源。
-// 3. 使用批量查询避免列表页对每篇文章逐条查库。
 func (s *articleService) loadArticleInteractionState(ctx context.Context, viewerUserID uint, articleIDs []uint) (map[uint]bool, map[uint]bool, error) {
 	liked := make(map[uint]bool)
 	favorited := make(map[uint]bool)
+	// 1. viewerUserID 为 0 时代表匿名访问，直接返回空状态。
 	if viewerUserID == 0 || len(articleIDs) == 0 {
 		return liked, favorited, nil
 	}
 
+	// 2. 已登录时分别查询 likes 和 favorites 关系表，数据库状态作为前端红色 icon 的权威来源。
+	// 3. 使用批量查询避免列表页对每篇文章逐条查库。
 	liked, err := s.likeRepo.ListLikedArticleIDs(ctx, viewerUserID, articleIDs)
 	if err != nil {
 		return nil, nil, err

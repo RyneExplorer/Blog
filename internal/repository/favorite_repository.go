@@ -55,15 +55,14 @@ func (r *favoriteRepository) UnfavoriteArticleInTx(ctx context.Context, userID, 
 }
 
 // ListFavoritedArticleIDs 批量查询当前用户已收藏的文章 ID
-// 1. 未登录或文章 ID 为空时返回空 map，公开列表无需强制登录。
-// 2. 只查 favorites 关系表，不依赖前端 localStorage 推断收藏状态。
-// 3. 转成 map 方便服务层快速填充每篇文章的 favorited 状态。
 func (r *favoriteRepository) ListFavoritedArticleIDs(ctx context.Context, userID uint, articleIDs []uint) (map[uint]bool, error) {
 	result := make(map[uint]bool)
+	// 1. 未登录或文章 ID 为空时返回空 map，公开列表无需强制登录。
 	if userID == 0 || len(articleIDs) == 0 {
 		return result, nil
 	}
 
+	// 2. 只查 favorites 关系表，不依赖前端 localStorage 推断收藏状态。
 	var ids []uint
 	if err := r.db.WithContext(ctx).Model(&entity.Favorite{}).
 		Where("user_id = ? AND article_id IN ?", userID, articleIDs).
@@ -71,6 +70,7 @@ func (r *favoriteRepository) ListFavoritedArticleIDs(ctx context.Context, userID
 		return nil, err
 	}
 
+	// 3. 转成 map 方便服务层快速填充每篇文章的 favorited 状态。
 	for _, id := range ids {
 		result[id] = true
 	}
