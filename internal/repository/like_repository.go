@@ -99,3 +99,49 @@ func (r *likeRepository) UnlikeCommentInTx(ctx context.Context, userID, commentI
 			UpdateColumn("like_count", gorm.Expr("GREATEST(like_count - ?, 0)", 1)).Error
 	})
 }
+
+// ListLikedArticleIDs 批量查询当前用户已点赞的文章 ID
+// 1. 未登录或文章 ID 为空时直接返回空结果，避免无意义查询。
+// 2. 只查询 likes 表中 target_type=article 的记录，保证文章和评论点赞互不干扰。
+// 3. 转成 map 方便服务层 O(1) 填充每篇文章的 liked 状态。
+func (r *likeRepository) ListLikedArticleIDs(ctx context.Context, userID uint, articleIDs []uint) (map[uint]bool, error) {
+	result := make(map[uint]bool)
+	if userID == 0 || len(articleIDs) == 0 {
+		return result, nil
+	}
+
+	var ids []uint
+	if err := r.db.WithContext(ctx).Model(&entity.Like{}).
+		Where("user_id = ? AND target_type = ? AND target_id IN ?", userID, entity.LikeTargetArticle, articleIDs).
+		Pluck("target_id", &ids).Error; err != nil {
+		return nil, err
+	}
+
+	for _, id := range ids {
+		result[id] = true
+	}
+	return result, nil
+}
+
+// ListLikedCommentIDs 批量查询当前用户已点赞的评论 ID
+// 1. 未登录或评论 ID 为空时直接返回空结果，公开评论列表无需强制登录。
+// 2. 只查询 likes 表中 target_type=comment 的记录，避免误用文章点赞记录。
+// 3. 转成 map 供评论树组装时快速标记 liked 字段。
+func (r *likeRepository) ListLikedCommentIDs(ctx context.Context, userID uint, commentIDs []uint) (map[uint]bool, error) {
+	result := make(map[uint]bool)
+	if userID == 0 || len(commentIDs) == 0 {
+		return result, nil
+	}
+
+	var ids []uint
+	if err := r.db.WithContext(ctx).Model(&entity.Like{}).
+		Where("user_id = ? AND target_type = ? AND target_id IN ?", userID, entity.LikeTargetComment, commentIDs).
+		Pluck("target_id", &ids).Error; err != nil {
+		return nil, err
+	}
+
+	for _, id := range ids {
+		result[id] = true
+	}
+	return result, nil
+}

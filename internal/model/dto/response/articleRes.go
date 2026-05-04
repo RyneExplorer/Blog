@@ -18,6 +18,8 @@ type ArticleDetailResponse struct {
 	FavoriteCount int    `json:"favorite_count"`
 	CommentCount  int    `json:"comment_count"`
 	CategoryIDs   []uint `json:"category_ids"`
+	Liked         bool   `json:"liked"`
+	Favorited     bool   `json:"favorited"`
 	CreatedAt     string `json:"created_at"`
 	UpdatedAt     string `json:"updated_at"`
 }
@@ -39,6 +41,8 @@ type ArticleBrief struct {
 	LikeCount     int    `json:"like_count"`
 	FavoriteCount int    `json:"favorite_count"`
 	CommentCount  int    `json:"comment_count"`
+	Liked         bool   `json:"liked"`
+	Favorited     bool   `json:"favorited"`
 	CreatedAt     string `json:"created_at"`
 	UpdatedAt     string `json:"updated_at"`
 }

@@ -6,4 +6,5 @@ import "context"
 type FavoriteRepository interface {
 	FavoriteArticleInTx(ctx context.Context, userID, articleID uint) error
 	UnfavoriteArticleInTx(ctx context.Context, userID, articleID uint) error
+	ListFavoritedArticleIDs(ctx context.Context, userID uint, articleIDs []uint) (map[uint]bool, error)
 }

@@ -19,7 +19,7 @@ import (
 
 // ArticleService 文章业务
 type ArticleService interface {
-	ListArticles(ctx context.Context, q *request.ArticleListQuery) (*response.PageResponse, error)
+	ListArticles(ctx context.Context, q *request.ArticleListQuery, viewerUserID uint) (*response.PageResponse, error)
 	GetArticleDetail(ctx context.Context, id uint, viewerUserID uint) (*dto.ArticleDetailResponse, error)
 	IncrementView(ctx context.Context, id uint) error
 	LikeArticle(ctx context.Context, userID, articleID uint) error
@@ -58,7 +58,47 @@ func formatDateTime(t time.Time) string {
 	return t.Format("2006-01-02 15:04:05")
 }
 
-func (s *articleService) ListArticles(ctx context.Context, q *request.ArticleListQuery) (*response.PageResponse, error) {
+// collectArticleIDsFromPublishedRows 收集公开文章列表中的文章 ID
+func collectArticleIDsFromPublishedRows(rows []repository.ArticleListJoinRow) []uint {
+	ids := make([]uint, 0, len(rows))
+	for _, row := range rows {
+		ids = append(ids, row.ID)
+	}
+	return ids
+}
+
+// collectArticleIDsFromMyRows 收集个人文章列表中的文章 ID
+func collectArticleIDsFromMyRows(rows []repository.MyArticleListJoinRow) []uint {
+	ids := make([]uint, 0, len(rows))
+	for _, row := range rows {
+		ids = append(ids, row.ID)
+	}
+	return ids
+}
+
+// loadArticleInteractionState 批量加载当前用户对文章的点赞和收藏状态
+// 1. viewerUserID 为 0 时代表匿名访问，直接返回空状态。
+// 2. 已登录时分别查询 likes 和 favorites 关系表，数据库状态作为前端红色 icon 的权威来源。
+// 3. 使用批量查询避免列表页对每篇文章逐条查库。
+func (s *articleService) loadArticleInteractionState(ctx context.Context, viewerUserID uint, articleIDs []uint) (map[uint]bool, map[uint]bool, error) {
+	liked := make(map[uint]bool)
+	favorited := make(map[uint]bool)
+	if viewerUserID == 0 || len(articleIDs) == 0 {
+		return liked, favorited, nil
+	}
+
+	liked, err := s.likeRepo.ListLikedArticleIDs(ctx, viewerUserID, articleIDs)
+	if err != nil {
+		return nil, nil, err
+	}
+	favorited, err = s.favoriteRepo.ListFavoritedArticleIDs(ctx, viewerUserID, articleIDs)
+	if err != nil {
+		return nil, nil, err
+	}
+	return liked, favorited, nil
+}
+
+func (s *articleService) ListArticles(ctx context.Context, q *request.ArticleListQuery, viewerUserID uint) (*response.PageResponse, error) {
 	// 1. 统一排序参数并计算分页偏移量。
 	sort := q.Sort
 	if sort == "" {
@@ -75,8 +115,12 @@ func (s *articleService) ListArticles(ctx context.Context, q *request.ArticleLis
 	if err != nil {
 		return nil, err
 	}
+	likedMap, favoritedMap, err := s.loadArticleInteractionState(ctx, viewerUserID, collectArticleIDsFromPublishedRows(rows))
+	if err != nil {
+		return nil, err
+	}
 
-	// 3. 最后把仓储层返回的行数据转换成接口响应结构。
+	// 3. 最后把仓储层返回的行数据和当前用户交互状态转换成接口响应结构。
 	list := make([]dto.ArticleListItem, 0, len(rows))
 	for _, row := range rows {
 		summary := strings.TrimSpace(row.Summary.String)
@@ -104,6 +148,8 @@ func (s *articleService) ListArticles(ctx context.Context, q *request.ArticleLis
 				LikeCount:     int(row.LikeCount),
 				FavoriteCount: int(row.FavoriteCount),
 				CommentCount:  int(row.CommentCount),
+				Liked:         likedMap[row.ID],
+				Favorited:     favoritedMap[row.ID],
 				CreatedAt:     formatDateTime(row.CreatedAt),
 				UpdatedAt:     formatDateTime(row.UpdatedAt),
 			},
@@ -134,10 +180,19 @@ func (s *articleService) GetArticleDetail(ctx context.Context, id uint, viewerUs
 	if a.Status != 2 && a.UserID != viewerUserID {
 		return nil, bizerrors.New(bizerrors.CodeForbidden, "无权限查看该文章")
 	}
+	likedMap, favoritedMap, err := s.loadArticleInteractionState(ctx, viewerUserID, []uint{a.ID})
+	if err != nil {
+		return nil, err
+	}
 
 	cids := make([]uint, 0, len(a.Categories))
+	categoryName := ""
 	for _, c := range a.Categories {
+		// 记录全部分类 ID，同时取第一个分类名给详情页顶部展示。
 		cids = append(cids, c.ID)
+		if categoryName == "" {
+			categoryName = c.Name
+		}
 	}
 
 	summary := strings.TrimSpace(a.Summary)
@@ -152,12 +207,19 @@ func (s *articleService) GetArticleDetail(ctx context.Context, id uint, viewerUs
 		Summary:       summary,
 		Content:       a.Content,
 		CoverImage:    a.CoverImage,
+		CategoryName:  categoryName,
+		Username:      a.User.Username,
+		Nickname:      a.User.Nickname,
+		Bio:           a.User.Bio,
+		Avatar:        a.User.Avatar,
 		Status:        a.Status,
 		ViewCount:     a.ViewCount,
 		LikeCount:     int(a.LikeCount),
 		FavoriteCount: int(a.FavoriteCount),
 		CommentCount:  int(a.CommentCount),
 		CategoryIDs:   cids,
+		Liked:         likedMap[a.ID],
+		Favorited:     favoritedMap[a.ID],
 		CreatedAt:     formatDateTime(a.CreatedAt),
 		UpdatedAt:     formatDateTime(a.UpdatedAt),
 	}, nil
@@ -240,8 +302,12 @@ func (s *articleService) ListMyArticles(ctx context.Context, userID uint, q *req
 	if err != nil {
 		return nil, err
 	}
+	likedMap, favoritedMap, err := s.loadArticleInteractionState(ctx, userID, collectArticleIDsFromMyRows(rows))
+	if err != nil {
+		return nil, err
+	}
 
-	// 3. 将仓储层结果转换为前端需要的列表结构。
+	// 3. 将仓储层结果和当前用户交互状态转换为前端需要的列表结构。
 	list := make([]dto.MyArticleListItem, 0, len(rows))
 	for _, row := range rows {
 		summary := strings.TrimSpace(row.Summary.String)
@@ -269,6 +335,8 @@ func (s *articleService) ListMyArticles(ctx context.Context, userID uint, q *req
 				LikeCount:     int(row.LikeCount),
 				FavoriteCount: int(row.FavoriteCount),
 				CommentCount:  int(row.CommentCount),
+				Liked:         likedMap[row.ID],
+				Favorited:     favoritedMap[row.ID],
 				CreatedAt:     formatDateTime(row.CreatedAt),
 				UpdatedAt:     formatDateTime(row.UpdatedAt),
 			},
@@ -296,8 +364,12 @@ func (s *articleService) ListMyFavorites(ctx context.Context, userID uint, q *re
 	if err != nil {
 		return nil, err
 	}
+	likedMap, favoritedMap, err := s.loadArticleInteractionState(ctx, userID, collectArticleIDsFromMyRows(rows))
+	if err != nil {
+		return nil, err
+	}
 
-	// 3. 组装成与“我的文章”一致的列表结构，便于前端复用。
+	// 3. 组装成与“我的文章”一致的列表结构，并携带真实点赞/收藏状态。
 	list := make([]dto.MyArticleListItem, 0, len(rows))
 	for _, row := range rows {
 		summary := strings.TrimSpace(row.Summary.String)
@@ -325,6 +397,8 @@ func (s *articleService) ListMyFavorites(ctx context.Context, userID uint, q *re
 				LikeCount:     int(row.LikeCount),
 				FavoriteCount: int(row.FavoriteCount),
 				CommentCount:  int(row.CommentCount),
+				Liked:         likedMap[row.ID],
+				Favorited:     favoritedMap[row.ID],
 				CreatedAt:     formatDateTime(row.CreatedAt),
 				UpdatedAt:     formatDateTime(row.UpdatedAt),
 			},

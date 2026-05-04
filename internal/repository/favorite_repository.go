@@ -53,3 +53,26 @@ func (r *favoriteRepository) UnfavoriteArticleInTx(ctx context.Context, userID, 
 			UpdateColumn("favorite_count", gorm.Expr("GREATEST(favorite_count - ?, 0)", 1)).Error
 	})
 }
+
+// ListFavoritedArticleIDs 批量查询当前用户已收藏的文章 ID
+// 1. 未登录或文章 ID 为空时返回空 map，公开列表无需强制登录。
+// 2. 只查 favorites 关系表，不依赖前端 localStorage 推断收藏状态。
+// 3. 转成 map 方便服务层快速填充每篇文章的 favorited 状态。
+func (r *favoriteRepository) ListFavoritedArticleIDs(ctx context.Context, userID uint, articleIDs []uint) (map[uint]bool, error) {
+	result := make(map[uint]bool)
+	if userID == 0 || len(articleIDs) == 0 {
+		return result, nil
+	}
+
+	var ids []uint
+	if err := r.db.WithContext(ctx).Model(&entity.Favorite{}).
+		Where("user_id = ? AND article_id IN ?", userID, articleIDs).
+		Pluck("article_id", &ids).Error; err != nil {
+		return nil, err
+	}
+
+	for _, id := range ids {
+		result[id] = true
+	}
+	return result, nil
+}

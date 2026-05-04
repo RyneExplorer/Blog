@@ -45,7 +45,8 @@ func (ctrl *ArticleController) List(c *gin.Context) {
 		response.BadRequest(c, "分页参数不正确："+err.Error())
 		return
 	}
-	page, err := ctrl.articleService.ListArticles(c.Request.Context(), &q)
+	userID := middleware.GetUserID(c)
+	page, err := ctrl.articleService.ListArticles(c.Request.Context(), &q, userID)
 	if err != nil {
 		response.BizError(c, err)
 		return
@@ -100,7 +101,8 @@ func (ctrl *ArticleController) Detail(c *gin.Context) {
 		response.BadRequest(c, "文章 ID 无效")
 		return
 	}
-	data, err := ctrl.articleService.GetArticleDetail(c.Request.Context(), id, 0)
+	userID := middleware.GetUserID(c)
+	data, err := ctrl.articleService.GetArticleDetail(c.Request.Context(), id, userID)
 	if err != nil {
 		response.BizError(c, err)
 		return
@@ -262,7 +264,8 @@ func (ctrl *ArticleController) ListComments(c *gin.Context) {
 		response.BadRequest(c, "分页参数不正确："+err.Error())
 		return
 	}
-	page, err := ctrl.commentService.ListByArticle(c.Request.Context(), articleID, &q)
+	userID := middleware.GetUserID(c)
+	page, err := ctrl.commentService.ListByArticle(c.Request.Context(), articleID, &q, userID)
 	if err != nil {
 		response.BizError(c, err)
 		return

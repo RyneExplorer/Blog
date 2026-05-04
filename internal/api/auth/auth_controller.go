@@ -111,6 +111,7 @@ func (ctrl *AuthController) SendEmailCode(c *gin.Context) {
 		return
 	}
 	if err := ctrl.authService.SendEmailCode(req.Email); err != nil {
+		logger.Error("发送验证码失败:", zap.Error(err))
 		response.BizError(c, err)
 		return
 	}

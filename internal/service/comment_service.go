@@ -18,7 +18,7 @@ import (
 
 // CommentService 评论业务
 type CommentService interface {
-	ListByArticle(ctx context.Context, articleID uint, q *request.CommentListQuery) (*response.PageResponse, error)
+	ListByArticle(ctx context.Context, articleID uint, q *request.CommentListQuery, viewerUserID uint) (*response.PageResponse, error)
 	CreateComment(ctx context.Context, userID uint, req *request.CreateCommentRequest) error
 	ReplyComment(ctx context.Context, userID uint, req *request.ReplyCommentRequest) error
 	DeleteComment(ctx context.Context, userID, commentID uint) error
@@ -45,7 +45,7 @@ func NewCommentService(
 	}
 }
 
-func toCommentBlock(row repository.CommentJoinRow) dto.CommentBlock {
+func toCommentBlock(row repository.CommentJoinRow, liked bool) dto.CommentBlock {
 	parent := 0
 	if row.ParentID.Valid {
 		parent = int(row.ParentID.Int64)
@@ -63,13 +63,14 @@ func toCommentBlock(row repository.CommentJoinRow) dto.CommentBlock {
 		Content:    row.Content,
 		LikeCount:  row.LikeCount,
 		ReplyCount: int(row.ReplyCount),
+		Liked:      liked,
 		CreatedAt:  row.CreatedAt.Format("2006-01-02 15:04:05"),
 		UpdatedAt:  row.UpdatedAt.Format("2006-01-02 15:04:05"),
 	}
 }
 
 // ListByArticle 分页一级评论 + 子评论树
-func (s *commentService) ListByArticle(ctx context.Context, articleID uint, q *request.CommentListQuery) (*response.PageResponse, error) {
+func (s *commentService) ListByArticle(ctx context.Context, articleID uint, q *request.CommentListQuery, viewerUserID uint) (*response.PageResponse, error) {
 	// 1. 先确认文章处于可见状态，避免未发布文章泄露评论内容。
 	ok, err := s.articleRepo.ExistsPublished(ctx, articleID)
 	if err != nil {
@@ -90,6 +91,15 @@ func (s *commentService) ListByArticle(ctx context.Context, articleID uint, q *r
 	if err != nil {
 		return nil, err
 	}
+	commentIDs := make([]uint, 0, len(rows))
+	for _, row := range rows {
+		commentIDs = append(commentIDs, row.ID)
+	}
+	// 3. 当前用户已登录时批量查询点赞关系，数据库状态作为评论红色 icon 的权威来源。
+	likedMap, err := s.likeRepo.ListLikedCommentIDs(ctx, viewerUserID, commentIDs)
+	if err != nil {
+		return nil, err
+	}
 
 	type wrap struct {
 		node *dto.CommentTreeNode
@@ -102,7 +112,7 @@ func (s *commentService) ListByArticle(ctx context.Context, articleID uint, q *r
 
 	for _, row := range rows {
 		node := &dto.CommentTreeNode{
-			Comment: toCommentBlock(row),
+			Comment: toCommentBlock(row, likedMap[row.ID]),
 			Author: dto.CommentAuthor{
 				ID:       row.UserID,
 				Avatar:   row.UserAvatar,
@@ -119,7 +129,7 @@ func (s *commentService) ListByArticle(ctx context.Context, articleID uint, q *r
 		}
 	}
 
-	// 3. 最后根据 parent_id 和 root_id 在内存中重建评论树。
+	// 4. 最后根据 parent_id 和 root_id 在内存中重建评论树。
 	var build func(id uint) *dto.CommentTreeNode
 	build = func(id uint) *dto.CommentTreeNode {
 		w := byID[id]

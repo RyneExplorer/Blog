@@ -50,6 +50,37 @@ func Auth() gin.HandlerFunc {
 	}
 }
 
+// OptionalAuth 可选 JWT 认证中间件
+// 1. 请求没有携带 Token 时继续放行，保证公开接口可匿名访问。
+// 2. 请求携带有效 Token 时写入用户上下文，供列表/详情接口返回真实交互状态。
+// 3. 请求携带无效 Token 时也继续放行，由需要强登录的接口继续使用 Auth 严格拦截。
+func OptionalAuth() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		authHeader := c.GetHeader("Authorization")
+		if authHeader == "" {
+			c.Next()
+			return
+		}
+
+		parts := strings.SplitN(authHeader, " ", 2)
+		if len(parts) != 2 || parts[0] != "Bearer" {
+			c.Next()
+			return
+		}
+
+		claims, err := jwt.ParseToken(parts[1])
+		if err != nil {
+			c.Next()
+			return
+		}
+
+		c.Set(ContextUserID, claims.GetUserID())
+		c.Set(ContextUsername, claims.GetUsername())
+		c.Set(ContextUserRole, claims.GetRole())
+		c.Next()
+	}
+}
+
 // RequireRole 要求当前登录用户具备指定角色之一
 func RequireRole(roles ...int) gin.HandlerFunc {
 	allowed := make(map[int]struct{}, len(roles))

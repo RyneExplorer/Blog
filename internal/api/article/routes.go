@@ -20,7 +20,7 @@ func (ctrl *ArticleController) RegisterRoutes(r *gin.RouterGroup) {
 		g.POST("/content_image", middleware.Auth(), ctrl.UploadContentImage)
 
 		// 获取文章列表
-		g.GET("", ctrl.List)
+		g.GET("", middleware.OptionalAuth(), ctrl.List)
 
 		// 获取我的收藏列表
 		g.GET("/favorites", middleware.Auth(), ctrl.ListFavorites)
@@ -32,10 +32,10 @@ func (ctrl *ArticleController) RegisterRoutes(r *gin.RouterGroup) {
 		g.GET("/mine/:id", middleware.Auth(), ctrl.MyDetail)
 
 		// 获取文章评论列表
-		g.GET("/:id/comments", ctrl.ListComments)
+		g.GET("/:id/comments", middleware.OptionalAuth(), ctrl.ListComments)
 
 		// 获取首页文章详情
-		g.GET("/:id", ctrl.Detail)
+		g.GET("/:id", middleware.OptionalAuth(), ctrl.Detail)
 
 		// 更新文章
 		g.PUT("/:id", middleware.Auth(), ctrl.Update)

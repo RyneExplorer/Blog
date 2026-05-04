@@ -8,6 +8,7 @@ type CommentBlock struct {
 	Content    string `json:"content"`
 	LikeCount  int    `json:"like_count"`
 	ReplyCount int    `json:"reply_count"`
+	Liked      bool   `json:"liked"`
 	CreatedAt  string `json:"created_at"`
 	UpdatedAt  string `json:"updated_at"`
 }

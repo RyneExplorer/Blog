@@ -45,7 +45,8 @@ func (ctrl *CommentController) ListByArticle(c *gin.Context) {
 		response.BadRequest(c, "分页参数不正确："+err.Error())
 		return
 	}
-	page, err := ctrl.commentService.ListByArticle(c.Request.Context(), articleID, &q)
+	userID := middleware.GetUserID(c)
+	page, err := ctrl.commentService.ListByArticle(c.Request.Context(), articleID, &q, userID)
 	if err != nil {
 		response.BizError(c, err)
 		return

@@ -163,8 +163,8 @@ func (s *authService) Register(req *request.RegisterRequest) error {
 	if req.EmailCaptcha != cacheCode {
 		return bizerrors.New(bizerrors.CodeInvalidParam, "验证码输入错误，请重新核对")
 	}
-	if delErr := s.redis.Del(ctx, codeKey); delErr != nil {
-		logger.Info("删除验证码失败")
+	if delErr := s.redis.Del(ctx, codeKey).Err(); delErr != nil {
+		logger.Error("删除验证码失败", zap.Error(delErr))
 	}
 
 	// 3. 最后加密密码并创建用户，避免明文密码落库。
@@ -199,9 +199,9 @@ func (s *authService) SendEmailCode(emailStr string) error {
 	// 2. 将验证码写入 Redis，并设置有效期控制时效。
 	ctx := context.Background()
 	key := fmt.Sprintf("email_code:%s", emailStr)
-	err := s.redis.Set(ctx, key, code, 5*time.Minute)
+	err := s.redis.Set(ctx, key, code, 5*time.Minute).Err()
 	if err != nil {
-		return bizerrors.NewWithErr(bizerrors.CodeInternalError, "缓存验证码失败", err.Err())
+		return bizerrors.NewWithErr(bizerrors.CodeInternalError, "缓存验证码失败", err)
 	}
 
 	// 3. 调用邮件组件把验证码发送给目标邮箱。
