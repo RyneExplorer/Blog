@@ -55,6 +55,15 @@ func (s *reviewService) List(ctx context.Context, adminID uint, q *request.Admin
 		return nil, err
 	}
 
+	articleIDs := make([]uint, 0, len(rows))
+	for _, row := range rows {
+		articleIDs = append(articleIDs, row.ID)
+	}
+	categoriesMap, err := s.articleRepo.ListCategoriesByArticleIDs(ctx, articleIDs)
+	if err != nil {
+		return nil, err
+	}
+
 	list := make([]dto.ArticleListItem, 0, len(rows))
 	for _, row := range rows {
 		summary := strings.TrimSpace(row.Summary.String)
@@ -62,9 +71,15 @@ func (s *reviewService) List(ctx context.Context, adminID uint, q *request.Admin
 			summary = utils.TruncateRunes(row.Content, 100)
 		}
 
-		cat := dto.CategoryBrief{}
-		if row.CategoryRefID.Valid {
-			cat = dto.CategoryBrief{ID: uint(row.CategoryRefID.Int64), Name: row.CategoryName, Slug: row.CategorySlug}
+		cats := make([]dto.CategoryBrief, 0)
+		if articleCats, ok := categoriesMap[row.ID]; ok {
+			for _, c := range articleCats {
+				cats = append(cats, dto.CategoryBrief{
+					ID:   c.ID,
+					Name: c.Name,
+					Slug: c.Slug,
+				})
+			}
 		}
 
 		list = append(list, dto.ArticleListItem{
@@ -87,7 +102,7 @@ func (s *reviewService) List(ctx context.Context, adminID uint, q *request.Admin
 				Avatar:   row.Avatar,
 				Bio:      row.Bio,
 			},
-			Category: cat,
+			Categories: cats,
 		})
 	}
 
@@ -120,14 +135,6 @@ func (s *reviewService) Detail(ctx context.Context, adminID uint, articleID uint
 		}
 	}
 
-	cids := make([]uint, 0)
-	if a != nil {
-		cids = make([]uint, 0, len(a.Categories))
-		for _, c := range a.Categories {
-			cids = append(cids, c.ID)
-		}
-	}
-
 	summary := strings.TrimSpace(row.Summary.String)
 	if summary == "" {
 		summary = utils.TruncateRunes(row.Content, 100)
@@ -147,7 +154,7 @@ func (s *reviewService) Detail(ctx context.Context, adminID uint, articleID uint
 			LikeCount:     int(row.LikeCount),
 			FavoriteCount: int(row.FavoriteCount),
 			CommentCount:  int(row.CommentCount),
-			CategoryIDs:   cids,
+			Categories:    cats,
 			CreatedAt:     formatTime(row.CreatedAt),
 			UpdatedAt:     formatTime(row.UpdatedAt),
 		},

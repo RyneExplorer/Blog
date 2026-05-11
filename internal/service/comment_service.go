@@ -245,16 +245,7 @@ func (s *commentService) DeleteComment(ctx context.Context, userID, commentID ui
 		return bizerrors.New(bizerrors.CodeForbidden, "无权删除该评论")
 	}
 
-	// 2. 再判断是否还有子评论，避免直接删除后破坏评论树结构。
-	n, err := s.commentRepo.CountChildren(ctx, commentID)
-	if err != nil {
-		return err
-	}
-	if n > 0 {
-		return bizerrors.New(bizerrors.CodeBadRequest, "请先删除子评论后再删除本条评论")
-	}
-
-	// 3. 满足条件后执行删除，并同步回退文章和父评论计数。
+	// 2. 执行删除，如果是根评论则同步删除所有子评论，并同步回退文章和父评论计数。
 	return s.commentRepo.DeleteWithCountersInTx(ctx, c)
 }
 

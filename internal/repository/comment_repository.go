@@ -64,12 +64,6 @@ func (r *commentRepository) GetByID(ctx context.Context, id uint) (*entity.Comme
 	return &c, nil
 }
 
-func (r *commentRepository) CountChildren(ctx context.Context, parentID uint) (int64, error) {
-	var n int64
-	err := r.db.WithContext(ctx).Model(&entity.Comment{}).Where("parent_id = ?", parentID).Count(&n).Error
-	return n, err
-}
-
 // CreateWithCountersInTx 发表评论/回复：插入评论并维护文章评论数、父评论回复数
 func (r *commentRepository) CreateWithCountersInTx(ctx context.Context, c *entity.Comment) error {
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
@@ -93,23 +87,39 @@ func (r *commentRepository) CreateWithCountersInTx(ctx context.Context, c *entit
 // DeleteWithCountersInTx 删除评论并回退计数
 func (r *commentRepository) DeleteWithCountersInTx(ctx context.Context, c *entity.Comment) error {
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		res := tx.Delete(&entity.Comment{}, c.ID)
-		if res.Error != nil {
-			return res.Error
-		}
-		if res.RowsAffected == 0 {
-			return gorm.ErrRecordNotFound
-		}
-		if err := tx.Model(&entity.Article{}).Where("id = ?", c.ArticleID).
-			UpdateColumn("comment_count", gorm.Expr("GREATEST(comment_count - ?, 0)", 1)).Error; err != nil {
-			return err
-		}
-		if c.ParentID != nil {
+		var deletedCount int64 = 0
+
+		if c.ParentID == nil {
+			// 是根评论，需要删除所有子评论 (root_id = c.ID)
+			res := tx.Where("id = ? OR root_id = ?", c.ID, c.ID).Delete(&entity.Comment{})
+			if res.Error != nil {
+				return res.Error
+			}
+			deletedCount = res.RowsAffected
+		} else {
+			// 不是根评论，只删除当前评论
+			res := tx.Delete(&entity.Comment{}, c.ID)
+			if res.Error != nil {
+				return res.Error
+			}
+			if res.RowsAffected == 0 {
+				return gorm.ErrRecordNotFound
+			}
+			deletedCount = 1
+
+			// 回退父评论的回复数
 			if err := tx.Model(&entity.Comment{}).Where("id = ?", *c.ParentID).
 				UpdateColumn("reply_count", gorm.Expr("GREATEST(reply_count - ?, 0)", 1)).Error; err != nil {
 				return err
 			}
 		}
+
+		// 回退文章评论数
+		if err := tx.Model(&entity.Article{}).Where("id = ?", c.ArticleID).
+			UpdateColumn("comment_count", gorm.Expr("GREATEST(comment_count - ?, 0)", deletedCount)).Error; err != nil {
+			return err
+		}
+
 		return nil
 	})
 }

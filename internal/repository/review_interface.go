@@ -45,9 +45,6 @@ type AdminArticleJoinRow struct {
 	Nickname      string         `gorm:"column:nickname"`
 	Avatar        string         `gorm:"column:avatar"`
 	Bio           string         `gorm:"column:bio"`
-	CategoryRefID sql.NullInt64  `gorm:"column:category_ref_id"`
-	CategoryName  string         `gorm:"column:category_name"`
-	CategorySlug  string         `gorm:"column:category_slug"`
 }
 
 // AdminArticleDetailRow 管理员详情行（包含内容）

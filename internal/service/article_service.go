@@ -115,7 +115,12 @@ func (s *articleService) ListArticles(ctx context.Context, q *request.ArticleLis
 	if err != nil {
 		return nil, err
 	}
-	likedMap, favoritedMap, err := s.loadArticleInteractionState(ctx, viewerUserID, collectArticleIDsFromPublishedRows(rows))
+	articleIDs := collectArticleIDsFromPublishedRows(rows)
+	likedMap, favoritedMap, err := s.loadArticleInteractionState(ctx, viewerUserID, articleIDs)
+	if err != nil {
+		return nil, err
+	}
+	categoriesMap, err := s.articleRepo.ListCategoriesByArticleIDs(ctx, articleIDs)
 	if err != nil {
 		return nil, err
 	}
@@ -128,12 +133,14 @@ func (s *articleService) ListArticles(ctx context.Context, q *request.ArticleLis
 			summary = utils.TruncateRunes(row.Content, 100)
 		}
 
-		cat := dto.CategoryBrief{}
-		if row.CategoryRefID.Valid {
-			cat = dto.CategoryBrief{
-				ID:   uint(row.CategoryRefID.Int64),
-				Name: row.CategoryName,
-				Slug: row.CategorySlug,
+		cats := make([]dto.CategoryBrief, 0)
+		if articleCats, ok := categoriesMap[row.ID]; ok {
+			for _, c := range articleCats {
+				cats = append(cats, dto.CategoryBrief{
+					ID:   c.ID,
+					Name: c.Name,
+					Slug: c.Slug,
+				})
 			}
 		}
 
@@ -159,7 +166,7 @@ func (s *articleService) ListArticles(ctx context.Context, q *request.ArticleLis
 				Avatar:   row.AuthorAvatar,
 				Bio:      row.AuthorBio,
 			},
-			Category: cat,
+			Categories: cats,
 		})
 	}
 
@@ -185,14 +192,13 @@ func (s *articleService) GetArticleDetail(ctx context.Context, id uint, viewerUs
 		return nil, err
 	}
 
-	cids := make([]uint, 0, len(a.Categories))
-	categoryName := ""
+	cats := make([]dto.CategoryBrief, 0, len(a.Categories))
 	for _, c := range a.Categories {
-		// 记录全部分类 ID，同时取第一个分类名给详情页顶部展示。
-		cids = append(cids, c.ID)
-		if categoryName == "" {
-			categoryName = c.Name
-		}
+		cats = append(cats, dto.CategoryBrief{
+			ID:   c.ID,
+			Name: c.Name,
+			Slug: c.Slug,
+		})
 	}
 
 	summary := strings.TrimSpace(a.Summary)
@@ -207,7 +213,7 @@ func (s *articleService) GetArticleDetail(ctx context.Context, id uint, viewerUs
 		Summary:       summary,
 		Content:       a.Content,
 		CoverImage:    a.CoverImage,
-		CategoryName:  categoryName,
+		Categories:    cats,
 		Username:      a.User.Username,
 		Nickname:      a.User.Nickname,
 		Bio:           a.User.Bio,
@@ -217,7 +223,6 @@ func (s *articleService) GetArticleDetail(ctx context.Context, id uint, viewerUs
 		LikeCount:     int(a.LikeCount),
 		FavoriteCount: int(a.FavoriteCount),
 		CommentCount:  int(a.CommentCount),
-		CategoryIDs:   cids,
 		Liked:         likedMap[a.ID],
 		Favorited:     favoritedMap[a.ID],
 		CreatedAt:     formatDateTime(a.CreatedAt),
@@ -302,7 +307,12 @@ func (s *articleService) ListMyArticles(ctx context.Context, userID uint, q *req
 	if err != nil {
 		return nil, err
 	}
-	likedMap, favoritedMap, err := s.loadArticleInteractionState(ctx, userID, collectArticleIDsFromMyRows(rows))
+	articleIDs := collectArticleIDsFromMyRows(rows)
+	likedMap, favoritedMap, err := s.loadArticleInteractionState(ctx, userID, articleIDs)
+	if err != nil {
+		return nil, err
+	}
+	categoriesMap, err := s.articleRepo.ListCategoriesByArticleIDs(ctx, articleIDs)
 	if err != nil {
 		return nil, err
 	}
@@ -315,12 +325,14 @@ func (s *articleService) ListMyArticles(ctx context.Context, userID uint, q *req
 			summary = utils.TruncateRunes(row.Content, 100)
 		}
 
-		cat := dto.CategoryBrief{}
-		if row.CategoryRefID.Valid {
-			cat = dto.CategoryBrief{
-				ID:   uint(row.CategoryRefID.Int64),
-				Name: row.CategoryName,
-				Slug: row.CategorySlug,
+		cats := make([]dto.CategoryBrief, 0)
+		if articleCats, ok := categoriesMap[row.ID]; ok {
+			for _, c := range articleCats {
+				cats = append(cats, dto.CategoryBrief{
+					ID:   c.ID,
+					Name: c.Name,
+					Slug: c.Slug,
+				})
 			}
 		}
 
@@ -340,7 +352,7 @@ func (s *articleService) ListMyArticles(ctx context.Context, userID uint, q *req
 				CreatedAt:     formatDateTime(row.CreatedAt),
 				UpdatedAt:     formatDateTime(row.UpdatedAt),
 			},
-			Category: cat,
+			Categories: cats,
 		})
 	}
 
@@ -364,29 +376,36 @@ func (s *articleService) ListMyFavorites(ctx context.Context, userID uint, q *re
 	if err != nil {
 		return nil, err
 	}
-	likedMap, favoritedMap, err := s.loadArticleInteractionState(ctx, userID, collectArticleIDsFromMyRows(rows))
+	articleIDs := collectArticleIDsFromMyRows(rows)
+	likedMap, favoritedMap, err := s.loadArticleInteractionState(ctx, userID, articleIDs)
+	if err != nil {
+		return nil, err
+	}
+	categoriesMap, err := s.articleRepo.ListCategoriesByArticleIDs(ctx, articleIDs)
 	if err != nil {
 		return nil, err
 	}
 
-	// 3. 组装成与“我的文章”一致的列表结构，并携带真实点赞/收藏状态。
-	list := make([]dto.MyArticleListItem, 0, len(rows))
+	// 3. 组装成公开文章列表结构，收藏页需要展示原作者信息。
+	list := make([]dto.ArticleListItem, 0, len(rows))
 	for _, row := range rows {
 		summary := strings.TrimSpace(row.Summary.String)
 		if summary == "" {
 			summary = utils.TruncateRunes(row.Content, 100)
 		}
 
-		cat := dto.CategoryBrief{}
-		if row.CategoryRefID.Valid {
-			cat = dto.CategoryBrief{
-				ID:   uint(row.CategoryRefID.Int64),
-				Name: row.CategoryName,
-				Slug: row.CategorySlug,
+		cats := make([]dto.CategoryBrief, 0)
+		if articleCats, ok := categoriesMap[row.ID]; ok {
+			for _, c := range articleCats {
+				cats = append(cats, dto.CategoryBrief{
+					ID:   c.ID,
+					Name: c.Name,
+					Slug: c.Slug,
+				})
 			}
 		}
 
-		list = append(list, dto.MyArticleListItem{
+		list = append(list, dto.ArticleListItem{
 			Article: dto.ArticleBrief{
 				ID:            row.ID,
 				Title:         row.Title,
@@ -402,7 +421,13 @@ func (s *articleService) ListMyFavorites(ctx context.Context, userID uint, q *re
 				CreatedAt:     formatDateTime(row.CreatedAt),
 				UpdatedAt:     formatDateTime(row.UpdatedAt),
 			},
-			Category: cat,
+			Author: dto.AuthorProfile{
+				ID:       row.UserID,
+				Nickname: row.AuthorNickname,
+				Avatar:   row.AuthorAvatar,
+				Bio:      row.AuthorBio,
+			},
+			Categories: cats,
 		})
 	}
 
