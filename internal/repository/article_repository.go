@@ -18,14 +18,19 @@ func NewArticleRepository(db *gorm.DB) ArticleRepository {
 	return &articleRepository{db: db}
 }
 
-// baseListQuery 文章列表基础查询
+// baseListQuery 文章列表基础查询（分类仅通过 article_categories，文章表无 category_id）
 func (r *articleRepository) baseListQuery(ctx context.Context, categoryID *uint) *gorm.DB {
 	q := r.db.WithContext(ctx).Table("articles").
 		Select(`articles.id, articles.title, articles.content, articles.summary, articles.cover_image, articles.status,
 			articles.view_count, articles.like_count, articles.favorite_count, articles.comment_count,
 			articles.created_at, articles.updated_at, articles.user_id,
-			users.nickname AS author_nickname, users.avatar AS author_avatar, users.bio AS author_bio`).
+			users.nickname AS author_nickname, users.avatar AS author_avatar, users.bio AS author_bio,
+			categories.id AS category_ref_id, categories.name AS category_name, categories.slug AS category_slug`).
 		Joins("INNER JOIN users ON users.id = articles.user_id").
+		Joins(`LEFT JOIN article_categories ac ON ac.article_id = articles.id AND ac.category_id = (
+			SELECT MIN(ac2.category_id) FROM article_categories ac2 WHERE ac2.article_id = articles.id
+		)`).
+		Joins("LEFT JOIN categories ON categories.id = ac.category_id").
 		Where("articles.status = ?", 2)
 	if categoryID != nil {
 		q = q.Where("articles.id IN (SELECT article_id FROM article_categories WHERE category_id = ?)", *categoryID)
@@ -66,6 +71,9 @@ func (r *articleRepository) GetPublishedDetailJoin(ctx context.Context, id uint)
 		Select(`articles.id, articles.title, articles.content, articles.cover_image, articles.status,
 			articles.view_count, articles.like_count, articles.favorite_count, articles.comment_count,
 			articles.created_at, articles.updated_at,
+			(SELECT c.name FROM article_categories ac
+			 INNER JOIN categories c ON c.id = ac.category_id
+			 WHERE ac.article_id = articles.id ORDER BY ac.category_id ASC LIMIT 1) AS category_name,
 			users.nickname AS nickname, users.bio AS bio, users.avatar AS avatar`).
 		Joins("INNER JOIN users ON users.id = articles.user_id").
 		Where("articles.id = ? AND articles.status = ?", id, 2).
@@ -104,9 +112,12 @@ func (r *articleRepository) baseMyListQuery(ctx context.Context, userID uint, ca
 	q := r.db.WithContext(ctx).Table("articles").
 		Select(`articles.id, articles.title, articles.content, articles.summary, articles.cover_image, articles.status,
 			articles.view_count, articles.like_count, articles.favorite_count, articles.comment_count,
-			articles.created_at, articles.updated_at, articles.user_id,
-			users.nickname AS author_nickname, users.avatar AS author_avatar, users.bio AS author_bio`).
-		Joins("INNER JOIN users ON users.id = articles.user_id").
+			articles.created_at, articles.updated_at,
+			categories.id AS category_ref_id, categories.name AS category_name, categories.slug AS category_slug`).
+		Joins(`LEFT JOIN article_categories ac ON ac.article_id = articles.id AND ac.category_id = (
+			SELECT MIN(ac2.category_id) FROM article_categories ac2 WHERE ac2.article_id = articles.id
+		)`).
+		Joins("LEFT JOIN categories ON categories.id = ac.category_id").
 		Where("articles.user_id = ?", userID)
 	if categoryID != nil {
 		q = q.Where("articles.id IN (SELECT article_id FROM article_categories WHERE category_id = ?)", *categoryID)
@@ -145,10 +156,13 @@ func (r *articleRepository) baseFavoritesQuery(ctx context.Context, userID uint,
 	q := r.db.WithContext(ctx).Table("articles").
 		Select(`articles.id, articles.title, articles.content, articles.summary, articles.cover_image, articles.status,
 			articles.view_count, articles.like_count, articles.favorite_count, articles.comment_count,
-			articles.created_at, articles.updated_at, articles.user_id,
-			users.nickname AS author_nickname, users.avatar AS author_avatar, users.bio AS author_bio`).
+			articles.created_at, articles.updated_at,
+			categories.id AS category_ref_id, categories.name AS category_name, categories.slug AS category_slug`).
 		Joins(`INNER JOIN favorites f ON f.article_id = articles.id AND f.user_id = ?`, userID).
-		Joins("INNER JOIN users ON users.id = articles.user_id")
+		Joins(`LEFT JOIN article_categories ac ON ac.article_id = articles.id AND ac.category_id = (
+			SELECT MIN(ac2.category_id) FROM article_categories ac2 WHERE ac2.article_id = articles.id
+		)`).
+		Joins("LEFT JOIN categories ON categories.id = ac.category_id")
 	if categoryID != nil {
 		q = q.Where("articles.id IN (SELECT article_id FROM article_categories WHERE category_id = ?)", *categoryID)
 	}
@@ -177,34 +191,6 @@ func (r *articleRepository) CountFavorites(ctx context.Context, userID uint, cat
 		return 0, err
 	}
 	return total, nil
-}
-
-func (r *articleRepository) ListCategoriesByArticleIDs(ctx context.Context, articleIDs []uint) (map[uint][]entity.Category, error) {
-	if len(articleIDs) == 0 {
-		return make(map[uint][]entity.Category), nil
-	}
-
-	type ArticleCategoryRow struct {
-		ArticleID uint
-		entity.Category
-	}
-	var rows []ArticleCategoryRow
-
-	err := r.db.WithContext(ctx).Table("article_categories").
-		Select("article_categories.article_id, categories.*").
-		Joins("INNER JOIN categories ON categories.id = article_categories.category_id").
-		Where("article_categories.article_id IN ?", articleIDs).
-		Order("article_categories.article_id ASC, categories.id ASC").
-		Scan(&rows).Error
-	if err != nil {
-		return nil, err
-	}
-
-	result := make(map[uint][]entity.Category)
-	for _, row := range rows {
-		result[row.ArticleID] = append(result[row.ArticleID], row.Category)
-	}
-	return result, nil
 }
 
 func (r *articleRepository) GetByIDWithCategories(ctx context.Context, id uint) (*entity.Article, error) {

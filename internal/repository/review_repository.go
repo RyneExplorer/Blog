@@ -22,8 +22,13 @@ func (r *reviewRepository) baseAdminQuery(ctx context.Context, f *AdminListFilte
 		Select(`articles.id, articles.title, articles.content, articles.summary, articles.cover_image, articles.reject_reason, articles.status,
 			articles.view_count, articles.like_count, articles.favorite_count, articles.comment_count,
 			articles.created_at, articles.updated_at, articles.user_id,
-			u.username AS username, u.nickname AS nickname, u.avatar AS avatar, u.bio AS bio`).
-		Joins("INNER JOIN users u ON u.id = articles.user_id")
+			u.username AS username, u.nickname AS nickname, u.avatar AS avatar, u.bio AS bio,
+			categories.id AS category_ref_id, categories.name AS category_name, categories.slug AS category_slug`).
+		Joins("INNER JOIN users u ON u.id = articles.user_id").
+		Joins(`LEFT JOIN article_categories ac ON ac.article_id = articles.id AND ac.category_id = (
+			SELECT MIN(ac2.category_id) FROM article_categories ac2 WHERE ac2.article_id = articles.id
+		)`).
+		Joins("LEFT JOIN categories ON categories.id = ac.category_id")
 
 	if f != nil {
 		if f.Status != nil {

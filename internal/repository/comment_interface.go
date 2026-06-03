@@ -29,6 +29,7 @@ type CommentRepository interface {
 	CountRootsByArticle(ctx context.Context, articleID uint) (int64, error)
 	ListJoinedByArticlePage(ctx context.Context, articleID uint, limit, offset int) ([]CommentJoinRow, error)
 	GetByID(ctx context.Context, id uint) (*entity.Comment, error)
+	CountChildren(ctx context.Context, parentID uint) (int64, error)
 	CreateWithCountersInTx(ctx context.Context, c *entity.Comment) error
 	DeleteWithCountersInTx(ctx context.Context, c *entity.Comment) error
 }
